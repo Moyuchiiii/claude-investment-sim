@@ -22,6 +22,7 @@ from src.data.indicators import TechnicalIndicators
 from src.data.fundamentals import FundamentalData
 from src.data.news import NewsCollector
 from src.data.sectors import SectorAnalyzer, SECTOR_MAP, SECTOR_COLORS
+from src.data.market import MarketIndicators
 
 CONFIG_PATH = Path(__file__).parent.parent.parent / "config.yaml"
 
@@ -380,6 +381,7 @@ indicators_calc = TechnicalIndicators()
 fundamental_data = FundamentalData()
 news_collector = NewsCollector()
 sector_analyzer = SectorAnalyzer()
+market_indicators = MarketIndicators()
 config = load_config()
 
 # ポートフォリオ取得
@@ -929,9 +931,9 @@ else:
 st.markdown('<hr class="section-divider">', unsafe_allow_html=True)
 
 # === 共通情報セレクター ===
-VIEWS = ["PORTFOLIO", "TRADES", "PERFORMANCE", "LEARNING", "SECTORS"]
+VIEWS = ["MARKET", "PORTFOLIO", "TRADES", "PERFORMANCE", "LEARNING", "SECTORS"]
 if "common_view" not in st.session_state:
-    st.session_state.common_view = "PORTFOLIO"
+    st.session_state.common_view = "MARKET"
 
 nav_cols = st.columns(len(VIEWS))
 for i, v in enumerate(VIEWS):
@@ -943,7 +945,61 @@ for i, v in enumerate(VIEWS):
 
 common_view = st.session_state.common_view
 
-if common_view == "PORTFOLIO":
+if common_view == "MARKET":
+    # --- MARKET OVERVIEW ---
+    @st.cache_data(ttl=300, show_spinner=False)
+    def get_market_data():
+        mi = MarketIndicators()
+        overview = mi.get_market_overview()
+        signals = mi.get_market_signal(overview)
+        return overview, signals
+
+    mkt_overview, mkt_signals = get_market_data()
+
+    # 指標カード4列
+    mc1, mc2, mc3, mc4 = st.columns(4)
+    for col, key in zip([mc1, mc2, mc3, mc4], ["nikkei", "topix", "usdjpy", "sp500"]):
+        data = mkt_overview.get(key, {})
+        name = data.get("name", key)
+        with col:
+            if "error" in data:
+                st.markdown(f"""
+                <div class="metric-card">
+                    <div class="metric-label">{name}</div>
+                    <div class="metric-value" style="font-size:18px; color:#64748b;">N/A</div>
+                </div>""", unsafe_allow_html=True)
+            else:
+                val = data["value"]
+                chg = data["change_pct"]
+                chg_abs = data["change"]
+                delta_class = "metric-delta-up" if chg >= 0 else "metric-delta-down"
+                sign = "+" if chg >= 0 else ""
+                # 為替は小数2桁、指数はカンマ区切り
+                if key == "usdjpy":
+                    val_str = f"¥{val:.2f}"
+                    chg_str = f"{sign}{chg_abs:.2f} ({sign}{chg:.2f}%)"
+                else:
+                    val_str = f"{val:,.0f}"
+                    chg_str = f"{sign}{chg_abs:,.0f} ({sign}{chg:.2f}%)"
+                st.markdown(f"""
+                <div class="metric-card">
+                    <div class="metric-label">{name}</div>
+                    <div class="metric-value" style="font-size:22px;">{val_str}</div>
+                    <div class="{delta_class}">{chg_str}</div>
+                </div>""", unsafe_allow_html=True)
+
+    # マーケットシグナル
+    if mkt_signals:
+        st.markdown("##### マーケットシグナル")
+        for s in mkt_signals:
+            if "良好" in s or "ポジティブ" in s or "追い風" in s:
+                st.markdown(f'<div class="signal-buy">{s}</div>', unsafe_allow_html=True)
+            elif "悪化" in s or "下押し" in s or "慎重" in s:
+                st.markdown(f'<div class="signal-sell">{s}</div>', unsafe_allow_html=True)
+            else:
+                st.markdown(f'<div class="signal-neutral">{s}</div>', unsafe_allow_html=True)
+
+elif common_view == "PORTFOLIO":
     # --- PORTFOLIO ---
     if holdings:
         holdings_data = []
