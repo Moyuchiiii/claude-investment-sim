@@ -1,0 +1,52 @@
+portfolio:
+  initial_cash: 1000000  # 100万円
+  currency: JPY
+
+markets:
+  japan:
+    enabled: true
+    symbols:
+      - 7203.T   # トヨタ
+      - 6758.T   # ソニー
+      - 9984.T   # ソフトバンクG
+      - 6861.T   # キーエンス
+      - 8306.T   # 三菱UFJ
+      - 6501.T   # 日立
+      - 7974.T   # 任天堂
+      - 4063.T   # 信越化学
+      - 9432.T   # NTT
+      - 6902.T   # デンソー
+  us:
+    enabled: true
+    symbols:
+      - AAPL
+      - MSFT
+      - GOOGL
+      - AMZN
+      - NVDA
+      - META
+      - TSLA
+      - JPM
+      - V
+      - JNJ
+
+trading:
+  max_position_pct: 0.2       # 1銘柄への最大投資割合 20%
+  min_confidence: 0.6          # 最低確信度
+  max_daily_trades: 5          # 1日の最大取引回数
+  stop_loss_pct: 0.05          # 損切りライン 5%
+  take_profit_pct: 0.15        # 利確ライン 15%
+
+schedule:
+  frequency: daily
+  time: "16:00"  # 東証終了後
+
+claude:
+  model: sonnet  # claude CLIで使うモデル
+  max_tokens: 4096
+  temperature: 0.3
+
+learning:
+  review_interval_days: 7      # 週次レビュー
+  lookback_trades: 50          # 学習に使う直近トレード数
+  min_trades_for_learning: 10  # 学習開始に必要な最低トレード数
