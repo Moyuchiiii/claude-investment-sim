@@ -125,7 +125,15 @@ cd D:\Claude\invest\claude-investment-sim && python scripts/execute_trade.py <BU
 cd D:\Claude\invest\claude-investment-sim && python scripts/record_lesson.py --outcome <WIN|LOSS|HOLD> --lesson "<教訓>" --profit-loss <損益額>
 ```
 
-### Step 7: レポート
+### Step 7: 実行記録
+
+スケジューラーに実行を記録する:
+
+```bash
+cd D:\Claude\invest\claude-investment-sim && python scripts/trade_scheduler.py record --trades <実行した取引件数> --value <ポートフォリオ評価額>
+```
+
+### Step 8: レポート
 
 最後にユーザーに以下をレポートする:
 - 分析した銘柄と結果
@@ -134,7 +142,7 @@ cd D:\Claude\invest\claude-investment-sim && python scripts/record_lesson.py --o
 - ポートフォリオの現在状況
 - 注目すべきシグナルや教訓
 
-### Step 8: 次回実行の推奨
+### Step 9: 次回実行の推奨
 
 現在時刻と東証の取引時間をもとに、次回の `/trade` 実行タイミングを提案する。
 
