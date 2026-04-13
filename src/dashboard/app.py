@@ -576,6 +576,49 @@ with st.sidebar:
     </div>
     """, unsafe_allow_html=True)
 
+    # === DATA GENERATION 進捗 ===
+    _progress_file = Path(__file__).parent.parent.parent / "learning" / "snapshots" / "_progress.json"
+    if _progress_file.exists():
+        with open(_progress_file, encoding="utf-8") as _pf:
+            _prog = _json.load(_pf)
+        _prog_status = _prog.get("status", "unknown")
+        _prog_pct = _prog.get("percent", 0)
+        _prog_current = _prog.get("current_month", "?")
+        _prog_completed = _prog.get("completed", 0)
+        _prog_total = _prog.get("total_months", 0)
+
+        if _prog_status == "generating":
+            # 生成中 — アニメーション付きプログレスバー
+            st.markdown("---")
+            st.markdown("### DATA GEN")
+            _bar_width = int(_prog_pct * 0.95)  # CSS幅用
+            st.markdown(f"""
+            <div style="background:#0d1117; border:1px solid #1e293b; border-radius:6px; padding:12px 14px;">
+                <div style="font-family:'Noto Sans JP',sans-serif; font-size:10px; color:#f59e0b; letter-spacing:1px; margin-bottom:8px;">
+                    GENERATING SNAPSHOTS
+                </div>
+                <div style="font-family:'JetBrains Mono',monospace; font-size:11px; color:#c8d6e5; margin-bottom:8px;">
+                    {_prog_current} ({_prog_completed}/{_prog_total})
+                </div>
+                <div style="background:#1e293b; border-radius:4px; height:8px; overflow:hidden;">
+                    <div style="background:linear-gradient(90deg, #00d4aa, #3b82f6); width:{_bar_width}%; height:100%; border-radius:4px; transition:width 0.5s;"></div>
+                </div>
+                <div style="font-family:'JetBrains Mono',monospace; font-size:10px; color:#64748b; margin-top:4px; text-align:right;">
+                    {_prog_pct:.1f}%
+                </div>
+            </div>
+            """, unsafe_allow_html=True)
+        elif _prog_status == "completed":
+            st.markdown("---")
+            st.markdown("### DATA GEN")
+            st.markdown(f"""
+            <div style="background:#0d1117; border:1px solid rgba(0,212,170,0.3); border-radius:6px; padding:12px 14px;">
+                <div style="font-family:'JetBrains Mono',monospace; font-size:11px; color:#00d4aa;">
+                    {_prog_total} months ready
+                </div>
+            </div>
+            """, unsafe_allow_html=True)
+
 # session_state から選択銘柄を参照
 selected_symbol = st.session_state.selected_symbol
 
