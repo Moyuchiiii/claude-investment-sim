@@ -407,39 +407,30 @@ with st.sidebar:
     st.markdown("---")
     st.markdown("### WATCHLIST")
 
-    # 監視銘柄リスト（クリックで銘柄切り替え）
-    st.markdown("""
-    <style>
-        /* ウォッチリストボタンをカード風に */
-        div[data-testid="stSidebar"] .stButton button {
-            background: #111827;
-            border: 1px solid #1e293b;
-            border-radius: 6px;
-            padding: 8px 14px;
-            width: 100%;
-            text-align: left;
-            color: #e2e8f0;
-            font-family: 'JetBrains Mono', monospace;
-            font-size: 12px;
-            margin-bottom: 4px;
-            transition: border-color 0.2s;
-        }
-        div[data-testid="stSidebar"] .stButton button:hover {
-            border-color: #00d4aa;
-        }
-    </style>
-    """, unsafe_allow_html=True)
+    # 全銘柄の価格を一括取得（キャッシュ60秒）
+    @st.cache_data(ttl=60)
+    def get_watchlist_prices(symbols: tuple) -> dict:
+        return fetcher.get_multiple_prices(list(symbols))
 
+    watchlist_prices = get_watchlist_prices(tuple(all_symbols))
+
+    # ウォッチリスト表示（HTML、軽量）
     for sym in all_symbols:
         name = SYMBOL_NAMES.get(sym, "")
-        price = fetcher.get_current_price(sym)
+        price = watchlist_prices.get(sym)
         price_str = f"¥{price:,.0f}" if price else "---"
-        # 選択中の銘柄はハイライト
         is_selected = sym == st.session_state.selected_symbol
-        label = f"{'▶ ' if is_selected else '  '}{sym}  {name}\n{price_str}"
-        if st.button(label, key=f"watchlist_{sym}"):
-            st.session_state.selected_symbol = sym
-            st.rerun()
+        border = "border-color:#00d4aa;" if is_selected else ""
+        marker = "▶ " if is_selected else ""
+        st.markdown(f"""
+        <div class="watchlist-item" style="{border}">
+            <div>
+                <div class="watchlist-symbol">{marker}{sym}</div>
+                <div class="watchlist-name">{name}</div>
+            </div>
+            <div class="watchlist-price price-flat">{price_str}</div>
+        </div>
+        """, unsafe_allow_html=True)
 
 # session_state から選択銘柄を参照
 selected_symbol = st.session_state.selected_symbol
