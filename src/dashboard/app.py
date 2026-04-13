@@ -463,6 +463,119 @@ with st.sidebar:
         </div>
         """, unsafe_allow_html=True)
 
+    # === SCHEDULE セクション ===
+    st.markdown("---")
+    st.markdown("### SCHEDULE")
+
+    # schedule.json を読み込んでスケジュール状況を表示
+    import json as _json
+    from zoneinfo import ZoneInfo as _ZoneInfo
+    from datetime import timedelta as _timedelta
+
+    _JST = _ZoneInfo("Asia/Tokyo")
+    _schedule_file = Path(__file__).parent.parent.parent / "data" / "schedule.json"
+
+    def _load_schedule_data() -> dict:
+        """スケジュールデータを読み込む。ファイルが存在しない場合は初期値を返す"""
+        if not _schedule_file.exists():
+            return {"last_execution": None, "executions": []}
+        with open(_schedule_file, encoding="utf-8") as _f:
+            return _json.load(_f)
+
+    def _calc_next_recommended_dt(last_exec_str: str | None) -> datetime:
+        """次回推奨実行日時を計算する"""
+        _now = datetime.now(_JST)
+        _today = _now.date()
+        _ran_today = False
+        if last_exec_str:
+            _last = datetime.fromisoformat(last_exec_str)
+            if _last.date() == _today:
+                _ran_today = True
+
+        def _make_dt(d):
+            return datetime(d.year, d.month, d.day, 15, 30, tzinfo=_JST)
+
+        def _next_wd(d):
+            d = d + _timedelta(days=1)
+            while d.weekday() >= 5:
+                d = d + _timedelta(days=1)
+            return d
+
+        if _ran_today:
+            return _make_dt(_next_wd(_today))
+        if _today.weekday() >= 5:
+            return _make_dt(_next_wd(_today))
+        _rec_today = _make_dt(_today)
+        if _now >= _rec_today:
+            return _make_dt(_next_wd(_today))
+        return _rec_today
+
+    def _calc_streak(executions: list) -> int:
+        """連続実行日数を計算する"""
+        if not executions:
+            return 0
+        _dates = sorted(
+            {datetime.fromisoformat(e["timestamp"]).date() for e in executions},
+            reverse=True
+        )
+        _today = datetime.now(_JST).date()
+        _streak = 0
+        _expected = _today
+        for _d in _dates:
+            if _d == _expected or (_streak == 0 and _d == _today - _timedelta(days=1)):
+                if _streak == 0 and _d < _today:
+                    _expected = _d
+                _streak += 1
+                _expected -= _timedelta(days=1)
+                while _expected.weekday() >= 5:
+                    _expected -= _timedelta(days=1)
+            else:
+                break
+        return _streak
+
+    _sched = _load_schedule_data()
+    _last_str = _sched.get("last_execution")
+    _execs = _sched.get("executions", [])
+    _now_jst = datetime.now(_JST)
+    _next_dt = _calc_next_recommended_dt(_last_str)
+    _streak = _calc_streak(_execs)
+    _overdue = _now_jst >= _next_dt
+
+    # 最終実行日時の表示文字列
+    if _last_str:
+        _last_dt = datetime.fromisoformat(_last_str)
+        _wd_ja = ["月", "火", "水", "木", "金", "土", "日"][_last_dt.weekday()]
+        _last_display = _last_dt.strftime(f"%m/%d({_wd_ja}) %H:%M")
+    else:
+        _last_display = "未実行"
+
+    # 次回推奨日時の表示文字列
+    _wd_ja_next = ["月", "火", "水", "木", "金", "土", "日"][_next_dt.weekday()]
+    _next_display = _next_dt.strftime(f"%m/%d({_wd_ja_next}) %H:%M")
+
+    # ストリーク表示（3日以上で色変え）
+    _streak_color = "#00d4aa" if _streak >= 3 else "#94a3b8" if _streak >= 1 else "#64748b"
+    _streak_label = f"{_streak}日連続" if _streak > 0 else "0日"
+
+    # 次回ステータス色（過期 → 黄色アラート）
+    _next_color = "#f59e0b" if _overdue else "#64748b"
+    _next_prefix = "⚠️ " if _overdue else ""
+
+    st.markdown(f"""
+    <div style="background:#0d1117; border:1px solid #1e293b; border-radius:6px; padding:12px 14px; margin-bottom:6px;">
+        <div style="font-family:'Noto Sans JP',sans-serif; font-size:10px; color:#64748b; letter-spacing:1px; margin-bottom:8px;">LAST RUN</div>
+        <div style="font-family:'JetBrains Mono',monospace; font-size:12px; color:#c8d6e5;">{_last_display}</div>
+    </div>
+    <div style="background:#0d1117; border:1px solid #1e293b; border-radius:6px; padding:12px 14px; margin-bottom:6px;">
+        <div style="font-family:'Noto Sans JP',sans-serif; font-size:10px; color:{_next_color}; letter-spacing:1px; margin-bottom:8px;">NEXT RUN</div>
+        <div style="font-family:'JetBrains Mono',monospace; font-size:12px; color:{_next_color};">{_next_prefix}{_next_display}</div>
+    </div>
+    <div style="background:#0d1117; border:1px solid #1e293b; border-radius:6px; padding:12px 14px; margin-bottom:6px;">
+        <div style="font-family:'Noto Sans JP',sans-serif; font-size:10px; color:#64748b; letter-spacing:1px; margin-bottom:8px;">STREAK</div>
+        <div style="font-family:'JetBrains Mono',monospace; font-size:14px; font-weight:700; color:{_streak_color};">{_streak_label}</div>
+    </div>
+    """, unsafe_allow_html=True)
+
 # session_state から選択銘柄を参照
 selected_symbol = st.session_state.selected_symbol
 
