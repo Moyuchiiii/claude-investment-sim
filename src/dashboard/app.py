@@ -314,6 +314,27 @@ st.markdown("""
         letter-spacing: 1px;
         text-transform: uppercase;
     }
+
+    /* ラジオボタンをターミナル風に */
+    .stRadio > div {
+        background: #111827;
+        border: 1px solid #1e293b;
+        border-radius: 8px;
+        padding: 4px;
+        gap: 0;
+    }
+    .stRadio label {
+        font-family: 'JetBrains Mono', monospace !important;
+        font-size: 12px !important;
+        color: #64748b !important;
+        letter-spacing: 0.5px;
+        padding: 8px 16px !important;
+        border-radius: 6px;
+    }
+    .stRadio [data-checked="true"] {
+        background: rgba(0, 212, 170, 0.1) !important;
+        color: #00d4aa !important;
+    }
 </style>
 """, unsafe_allow_html=True)
 
@@ -708,243 +729,109 @@ if selected_symbol:
     else:
         st.warning(f"{selected_symbol} のデータを取得できませんでした。")
 
-st.markdown('<hr class="section-divider">', unsafe_allow_html=True)
+    # === ファンダメンタルズセクション（銘柄別・常時表示） ===
+    st.markdown('<hr class="section-divider">', unsafe_allow_html=True)
+    st.markdown(f"#### {selected_symbol} {SYMBOL_NAMES.get(selected_symbol, '')} — ファンダメンタルズ")
 
-# === 下部タブ ===
-tab1, tab2, tab3, tab4, tab5, tab6, tab7 = st.tabs(["PORTFOLIO", "TRADES", "PERFORMANCE", "LEARNING", "FUNDAMENTALS", "NEWS", "SECTORS"])
+    fund = fundamental_data.get_fundamentals(selected_symbol)
+    if "error" not in fund:
+        # バリュエーション指標カード（3列 x 2行）
+        fc1, fc2, fc3 = st.columns(3)
 
-with tab1:
-    if holdings:
-        holdings_data = []
-        for h in holdings:
-            current_price = prices.get(h.symbol) or h.avg_cost
-            market_value = h.quantity * current_price
-            unrealized_pnl = market_value - (h.quantity * h.avg_cost)
-            return_pct = (current_price / h.avg_cost - 1) * 100
-            holdings_data.append({
-                "銘柄": f"{h.symbol} {SYMBOL_NAMES.get(h.symbol, '')}",
-                "数量": h.quantity,
-                "取得単価": f"¥{h.avg_cost:,.0f}",
-                "現在価格": f"¥{current_price:,.0f}",
-                "評価額": f"¥{market_value:,.0f}",
-                "損益": f"¥{unrealized_pnl:+,.0f}",
-                "収益率": f"{return_pct:+.1f}%"
-            })
-        st.dataframe(pd.DataFrame(holdings_data), use_container_width=True, hide_index=True)
+        per = fund.get("per")
+        per_color = "#00d4aa" if per and per < 15 else "#ef4444" if per and per > 30 else "#94a3b8"
+        fc1.markdown(f"""
+        <div class="metric-card">
+            <div class="metric-label">PER</div>
+            <div class="metric-value" style="color:{per_color}; font-size:22px;">{f'{per:.1f}' if per else 'N/A'}</div>
+        </div>""", unsafe_allow_html=True)
 
-        # 構成比
-        pie_data = [{"name": "Cash", "value": portfolio.cash}]
-        for h in holdings:
-            cp = prices.get(h.symbol) or h.avg_cost
-            pie_data.append({"name": h.symbol, "value": h.quantity * cp})
-        fig_pie = go.Figure(go.Pie(
-            labels=[d["name"] for d in pie_data],
-            values=[d["value"] for d in pie_data],
-            hole=0.55,
-            marker=dict(colors=["#1e293b", "#00d4aa", "#3b82f6", "#f59e0b", "#a855f7",
-                                "#ef4444", "#06b6d4", "#84cc16", "#ec4899", "#f97316", "#6366f1"]),
-            textfont=dict(family="JetBrains Mono", size=11),
-        ))
-        fig_pie.update_layout(**CHART_LAYOUT, height=300, showlegend=True)
-        st.plotly_chart(fig_pie, use_container_width=True)
-    else:
-        st.markdown('<div style="text-align:center; padding:40px; color:#334155; font-family:JetBrains Mono;">NO POSITIONS</div>', unsafe_allow_html=True)
+        pbr = fund.get("pbr")
+        pbr_color = "#00d4aa" if pbr and pbr < 1.0 else "#ef4444" if pbr and pbr > 5.0 else "#94a3b8"
+        fc2.markdown(f"""
+        <div class="metric-card">
+            <div class="metric-label">PBR</div>
+            <div class="metric-value" style="color:{pbr_color}; font-size:22px;">{f'{pbr:.2f}' if pbr else 'N/A'}</div>
+        </div>""", unsafe_allow_html=True)
 
-with tab2:
-    trades = trade_repo.get_recent(limit=50)
-    if trades:
-        trades_data = []
-        for t in trades:
-            trades_data.append({
-                "日時": t.executed_at[:16] if t.executed_at else "",
-                "銘柄": f"{t.symbol} {SYMBOL_NAMES.get(t.symbol, '')}",
-                "売買": t.action,
-                "数量": t.quantity,
-                "実行価格": f"¥{t.price:,.2f}",
-                "金額": f"¥{t.total_amount:,.0f}",
-                "手数料": f"¥{t.commission:,.0f}" if t.commission else "¥0",
-                "スリッページ": f"¥{t.slippage:,.0f}" if t.slippage else "¥0",
-                "税金": f"¥{t.tax:,.0f}" if t.tax else "¥0",
-                "確信度": f"{t.confidence:.0%}" if t.confidence else "-",
-                "理由": (t.reasoning or "")[:50]
-            })
-        st.dataframe(pd.DataFrame(trades_data), use_container_width=True, hide_index=True)
+        roe = fund.get("roe")
+        roe_pct = f"{roe:.1%}" if roe else "N/A"
+        roe_color = "#00d4aa" if roe and roe > 0.10 else "#ef4444" if roe and roe < 0.05 else "#94a3b8"
+        fc3.markdown(f"""
+        <div class="metric-card">
+            <div class="metric-label">ROE</div>
+            <div class="metric-value" style="color:{roe_color}; font-size:22px;">{roe_pct}</div>
+        </div>""", unsafe_allow_html=True)
 
-        buy_count = sum(1 for t in trades if t.action == "BUY")
-        sell_count = sum(1 for t in trades if t.action == "SELL")
-        total_commission = sum(t.commission or 0 for t in trades)
-        total_slippage = sum(t.slippage or 0 for t in trades)
-        total_tax = sum(t.tax or 0 for t in trades)
-        tc1, tc2, tc3, tc4, tc5, tc6 = st.columns(6)
-        tc1.metric("総取引", len(trades))
-        tc2.metric("BUY", buy_count)
-        tc3.metric("SELL", sell_count)
-        tc4.metric("手数料合計", f"¥{total_commission:,.0f}")
-        tc5.metric("スリッページ合計", f"¥{total_slippage:,.0f}")
-        tc6.metric("税金合計", f"¥{total_tax:,.0f}")
-    else:
-        st.markdown('<div style="text-align:center; padding:40px; color:#334155; font-family:JetBrains Mono;">NO TRADES YET</div>', unsafe_allow_html=True)
+        fc4, fc5, fc6 = st.columns(3)
 
-with tab3:
-    days_range = 30
-    performance = performance_repo.get_history(days=days_range)
-    if performance:
-        perf_df = pd.DataFrame([
-            {"date": p.date, "value": p.total_value, "cash": p.cash, "return": p.daily_return or 0}
-            for p in reversed(performance)
-        ])
+        eps = fund.get("eps")
+        fc4.markdown(f"""
+        <div class="metric-card">
+            <div class="metric-label">EPS</div>
+            <div class="metric-value" style="font-size:22px;">{'¥' + f'{eps:,.0f}' if eps else 'N/A'}</div>
+        </div>""", unsafe_allow_html=True)
 
-        fig_perf = go.Figure()
-        fig_perf.add_trace(go.Scatter(
-            x=perf_df["date"], y=perf_df["value"], name="NAV",
-            line=dict(color="#00d4aa", width=2),
-            fill="tozeroy", fillcolor="rgba(0,212,170,0.05)"
-        ))
-        fig_perf.add_hline(y=initial_cash, line_dash="dot", line_color="#334155",
-                           annotation_text="Initial", annotation_font_color="#334155")
-        fig_perf.update_layout(**CHART_LAYOUT, height=300,
-                               title=dict(text="NAV HISTORY", font=dict(size=12, color="#64748b")))
-        st.plotly_chart(fig_perf, use_container_width=True)
+        div_yield = fund.get("dividend_yield")
+        div_str = f"{div_yield:.2%}" if div_yield else "N/A"
+        div_color = "#00d4aa" if div_yield and div_yield > 0.03 else "#94a3b8"
+        fc5.markdown(f"""
+        <div class="metric-card">
+            <div class="metric-label">配当利回り</div>
+            <div class="metric-value" style="color:{div_color}; font-size:22px;">{div_str}</div>
+        </div>""", unsafe_allow_html=True)
 
-        # 日次リターン
-        ret_colors = ["#00d4aa" if r >= 0 else "#ef4444" for r in perf_df["return"]]
-        fig_ret = go.Figure(go.Bar(
-            x=perf_df["date"], y=perf_df["return"], marker_color=ret_colors
-        ))
-        fig_ret.update_layout(**CHART_LAYOUT, height=200,
-                              title=dict(text="DAILY RETURNS %", font=dict(size=12, color="#64748b")))
-        st.plotly_chart(fig_ret, use_container_width=True)
-    else:
-        st.markdown('<div style="text-align:center; padding:40px; color:#334155; font-family:JetBrains Mono;">NO PERFORMANCE DATA</div>', unsafe_allow_html=True)
-
-with tab4:
-    lessons = learning_repo.get_lessons(limit=30)
-    if lessons:
-        wins = sum(1 for l in lessons if l.outcome == "WIN")
-        losses = sum(1 for l in lessons if l.outcome == "LOSS")
-        total = wins + losses
-        win_rate = (wins / total * 100) if total > 0 else 0
-
-        lc1, lc2, lc3 = st.columns(3)
-        lc1.metric("Win Rate", f"{win_rate:.0f}%")
-        lc2.metric("Wins", wins)
-        lc3.metric("Losses", losses)
-
-        for l in lessons:
-            icon = "+" if l.outcome == "WIN" else "-" if l.outcome == "LOSS" else "="
-            icon_color = "#00d4aa" if l.outcome == "WIN" else "#ef4444" if l.outcome == "LOSS" else "#64748b"
-            with st.expander(f"[{l.outcome}] {l.lesson or 'No lesson'} — {l.created_at[:10] if l.created_at else ''}"):
-                if l.profit_loss is not None:
-                    st.code(f"P&L: ¥{l.profit_loss:+,.0f}")
-                if l.strategy_adjustment:
-                    st.code(f"Adjustment: {l.strategy_adjustment}")
-    else:
-        st.markdown('<div style="text-align:center; padding:40px; color:#334155; font-family:JetBrains Mono;">NO LEARNING DATA YET</div>', unsafe_allow_html=True)
-
-# === FUNDAMENTALSタブ ===
-with tab5:
-    if selected_symbol:
-        st.markdown(f"#### {selected_symbol} {SYMBOL_NAMES.get(selected_symbol, '')} — ファンダメンタルズ")
-
-        fund = fundamental_data.get_fundamentals(selected_symbol)
-        if "error" not in fund:
-            # バリュエーション指標カード（3列 x 2行）
-            fc1, fc2, fc3 = st.columns(3)
-
-            per = fund.get("per")
-            per_color = "#00d4aa" if per and per < 15 else "#ef4444" if per and per > 30 else "#94a3b8"
-            fc1.markdown(f"""
-            <div class="metric-card">
-                <div class="metric-label">PER</div>
-                <div class="metric-value" style="color:{per_color}; font-size:22px;">{f'{per:.1f}' if per else 'N/A'}</div>
-            </div>""", unsafe_allow_html=True)
-
-            pbr = fund.get("pbr")
-            pbr_color = "#00d4aa" if pbr and pbr < 1.0 else "#ef4444" if pbr and pbr > 5.0 else "#94a3b8"
-            fc2.markdown(f"""
-            <div class="metric-card">
-                <div class="metric-label">PBR</div>
-                <div class="metric-value" style="color:{pbr_color}; font-size:22px;">{f'{pbr:.2f}' if pbr else 'N/A'}</div>
-            </div>""", unsafe_allow_html=True)
-
-            roe = fund.get("roe")
-            roe_pct = f"{roe:.1%}" if roe else "N/A"
-            roe_color = "#00d4aa" if roe and roe > 0.10 else "#ef4444" if roe and roe < 0.05 else "#94a3b8"
-            fc3.markdown(f"""
-            <div class="metric-card">
-                <div class="metric-label">ROE</div>
-                <div class="metric-value" style="color:{roe_color}; font-size:22px;">{roe_pct}</div>
-            </div>""", unsafe_allow_html=True)
-
-            fc4, fc5, fc6 = st.columns(3)
-
-            eps = fund.get("eps")
-            fc4.markdown(f"""
-            <div class="metric-card">
-                <div class="metric-label">EPS</div>
-                <div class="metric-value" style="font-size:22px;">{'¥' + f'{eps:,.0f}' if eps else 'N/A'}</div>
-            </div>""", unsafe_allow_html=True)
-
-            div_yield = fund.get("dividend_yield")
-            div_str = f"{div_yield:.2%}" if div_yield else "N/A"
-            div_color = "#00d4aa" if div_yield and div_yield > 0.03 else "#94a3b8"
-            fc5.markdown(f"""
-            <div class="metric-card">
-                <div class="metric-label">配当利回り</div>
-                <div class="metric-value" style="color:{div_color}; font-size:22px;">{div_str}</div>
-            </div>""", unsafe_allow_html=True)
-
-            mcap = fund.get("market_cap")
-            if mcap:
-                if mcap >= 1e12:
-                    mcap_str = f"¥{mcap/1e12:.1f}兆"
-                elif mcap >= 1e8:
-                    mcap_str = f"¥{mcap/1e8:.0f}億"
-                else:
-                    mcap_str = f"¥{mcap:,.0f}"
+        mcap = fund.get("market_cap")
+        if mcap:
+            if mcap >= 1e12:
+                mcap_str = f"¥{mcap/1e12:.1f}兆"
+            elif mcap >= 1e8:
+                mcap_str = f"¥{mcap/1e8:.0f}億"
             else:
-                mcap_str = "N/A"
-            fc6.markdown(f"""
-            <div class="metric-card">
-                <div class="metric-label">時価総額</div>
-                <div class="metric-value" style="font-size:22px;">{mcap_str}</div>
-            </div>""", unsafe_allow_html=True)
-
-            # 追加指標テーブル
-            detail_data = []
-            label_map = {
-                "profit_margin": ("利益率", lambda v: f"{v:.1%}"),
-                "debt_to_equity": ("D/E比率", lambda v: f"{v:.0f}%"),
-                "current_ratio": ("流動比率", lambda v: f"{v:.2f}"),
-                "free_cashflow": ("FCF", lambda v: f"¥{v:,.0f}"),
-                "revenue": ("売上高", lambda v: f"¥{v:,.0f}"),
-                "sector": ("セクター", lambda v: str(v)),
-                "industry": ("業種", lambda v: str(v)),
-            }
-            for key, (label, fmt) in label_map.items():
-                val = fund.get(key)
-                if val is not None:
-                    detail_data.append({"指標": label, "値": fmt(val)})
-
-            if detail_data:
-                st.dataframe(pd.DataFrame(detail_data), use_container_width=True, hide_index=True)
-
-            # ファンダメンタルシグナル
-            fund_signals = fundamental_data.get_valuation_signal(fund)
-            if fund_signals:
-                st.markdown("##### バリュエーションシグナル")
-                for s in fund_signals:
-                    if "割安" in s or "高収益" in s or "高配当" in s or "高利益率" in s:
-                        st.markdown(f'<div class="signal-buy">{s}</div>', unsafe_allow_html=True)
-                    elif "割高" in s or "低収益" in s or "高負債" in s or "低利益率" in s:
-                        st.markdown(f'<div class="signal-sell">{s}</div>', unsafe_allow_html=True)
-                    else:
-                        st.markdown(f'<div class="signal-neutral">{s}</div>', unsafe_allow_html=True)
+                mcap_str = f"¥{mcap:,.0f}"
         else:
-            st.warning(f"ファンダメンタルズデータを取得できませんでした: {fund.get('error', '')}")
+            mcap_str = "N/A"
+        fc6.markdown(f"""
+        <div class="metric-card">
+            <div class="metric-label">時価総額</div>
+            <div class="metric-value" style="font-size:22px;">{mcap_str}</div>
+        </div>""", unsafe_allow_html=True)
 
-# === NEWSタブ ===
-with tab6:
+        # 追加指標テーブル
+        detail_data = []
+        label_map = {
+            "profit_margin": ("利益率", lambda v: f"{v:.1%}"),
+            "debt_to_equity": ("D/E比率", lambda v: f"{v:.0f}%"),
+            "current_ratio": ("流動比率", lambda v: f"{v:.2f}"),
+            "free_cashflow": ("FCF", lambda v: f"¥{v:,.0f}"),
+            "revenue": ("売上高", lambda v: f"¥{v:,.0f}"),
+            "sector": ("セクター", lambda v: str(v)),
+            "industry": ("業種", lambda v: str(v)),
+        }
+        for key, (label, fmt) in label_map.items():
+            val = fund.get(key)
+            if val is not None:
+                detail_data.append({"指標": label, "値": fmt(val)})
+
+        if detail_data:
+            st.dataframe(pd.DataFrame(detail_data), use_container_width=True, hide_index=True)
+
+        # ファンダメンタルシグナル
+        fund_signals = fundamental_data.get_valuation_signal(fund)
+        if fund_signals:
+            st.markdown("##### バリュエーションシグナル")
+            for s in fund_signals:
+                if "割安" in s or "高収益" in s or "高配当" in s or "高利益率" in s:
+                    st.markdown(f'<div class="signal-buy">{s}</div>', unsafe_allow_html=True)
+                elif "割高" in s or "低収益" in s or "高負債" in s or "低利益率" in s:
+                    st.markdown(f'<div class="signal-sell">{s}</div>', unsafe_allow_html=True)
+                else:
+                    st.markdown(f'<div class="signal-neutral">{s}</div>', unsafe_allow_html=True)
+    else:
+        st.warning(f"ファンダメンタルズデータを取得できませんでした: {fund.get('error', '')}")
+
+    # === ニュースセクション（銘柄別・常時表示） ===
+    st.markdown('<hr class="section-divider">', unsafe_allow_html=True)
     col_stock_news, col_market_news = st.columns(2)
 
     with col_stock_news:
@@ -1028,8 +915,151 @@ with tab6:
         else:
             st.info("市場ニュースを取得できませんでした")
 
-# === SECTORSタブ ===
-with tab7:
+else:
+    st.warning(f"{selected_symbol} のデータを取得できませんでした。")
+
+st.markdown('<hr class="section-divider">', unsafe_allow_html=True)
+
+# === 共通情報セレクター ===
+common_view = st.radio(
+    "VIEW",
+    ["PORTFOLIO", "TRADES", "PERFORMANCE", "LEARNING", "SECTORS"],
+    horizontal=True,
+    label_visibility="collapsed"
+)
+
+if common_view == "PORTFOLIO":
+    # --- PORTFOLIO ---
+    if holdings:
+        holdings_data = []
+        for h in holdings:
+            current_price = prices.get(h.symbol) or h.avg_cost
+            market_value = h.quantity * current_price
+            unrealized_pnl = market_value - (h.quantity * h.avg_cost)
+            return_pct = (current_price / h.avg_cost - 1) * 100
+            holdings_data.append({
+                "銘柄": f"{h.symbol} {SYMBOL_NAMES.get(h.symbol, '')}",
+                "数量": h.quantity,
+                "取得単価": f"¥{h.avg_cost:,.0f}",
+                "現在価格": f"¥{current_price:,.0f}",
+                "評価額": f"¥{market_value:,.0f}",
+                "損益": f"¥{unrealized_pnl:+,.0f}",
+                "収益率": f"{return_pct:+.1f}%"
+            })
+        st.dataframe(pd.DataFrame(holdings_data), use_container_width=True, hide_index=True)
+
+        # 構成比
+        pie_data = [{"name": "Cash", "value": portfolio.cash}]
+        for h in holdings:
+            cp = prices.get(h.symbol) or h.avg_cost
+            pie_data.append({"name": h.symbol, "value": h.quantity * cp})
+        fig_pie = go.Figure(go.Pie(
+            labels=[d["name"] for d in pie_data],
+            values=[d["value"] for d in pie_data],
+            hole=0.55,
+            marker=dict(colors=["#1e293b", "#00d4aa", "#3b82f6", "#f59e0b", "#a855f7",
+                                "#ef4444", "#06b6d4", "#84cc16", "#ec4899", "#f97316", "#6366f1"]),
+            textfont=dict(family="JetBrains Mono", size=11),
+        ))
+        fig_pie.update_layout(**CHART_LAYOUT, height=300, showlegend=True)
+        st.plotly_chart(fig_pie, use_container_width=True)
+    else:
+        st.markdown('<div style="text-align:center; padding:40px; color:#334155; font-family:JetBrains Mono;">NO POSITIONS</div>', unsafe_allow_html=True)
+
+elif common_view == "TRADES":
+    # --- TRADES ---
+    trades = trade_repo.get_recent(limit=50)
+    if trades:
+        trades_data = []
+        for t in trades:
+            trades_data.append({
+                "日時": t.executed_at[:16] if t.executed_at else "",
+                "銘柄": f"{t.symbol} {SYMBOL_NAMES.get(t.symbol, '')}",
+                "売買": t.action,
+                "数量": t.quantity,
+                "実行価格": f"¥{t.price:,.2f}",
+                "金額": f"¥{t.total_amount:,.0f}",
+                "手数料": f"¥{t.commission:,.0f}" if t.commission else "¥0",
+                "スリッページ": f"¥{t.slippage:,.0f}" if t.slippage else "¥0",
+                "税金": f"¥{t.tax:,.0f}" if t.tax else "¥0",
+                "確信度": f"{t.confidence:.0%}" if t.confidence else "-",
+                "理由": (t.reasoning or "")[:50]
+            })
+        st.dataframe(pd.DataFrame(trades_data), use_container_width=True, hide_index=True)
+
+        buy_count = sum(1 for t in trades if t.action == "BUY")
+        sell_count = sum(1 for t in trades if t.action == "SELL")
+        total_commission = sum(t.commission or 0 for t in trades)
+        total_slippage = sum(t.slippage or 0 for t in trades)
+        total_tax = sum(t.tax or 0 for t in trades)
+        tc1, tc2, tc3, tc4, tc5, tc6 = st.columns(6)
+        tc1.metric("総取引", len(trades))
+        tc2.metric("BUY", buy_count)
+        tc3.metric("SELL", sell_count)
+        tc4.metric("手数料合計", f"¥{total_commission:,.0f}")
+        tc5.metric("スリッページ合計", f"¥{total_slippage:,.0f}")
+        tc6.metric("税金合計", f"¥{total_tax:,.0f}")
+    else:
+        st.markdown('<div style="text-align:center; padding:40px; color:#334155; font-family:JetBrains Mono;">NO TRADES YET</div>', unsafe_allow_html=True)
+
+elif common_view == "PERFORMANCE":
+    # --- PERFORMANCE ---
+    days_range = 30
+    performance = performance_repo.get_history(days=days_range)
+    if performance:
+        perf_df = pd.DataFrame([
+            {"date": p.date, "value": p.total_value, "cash": p.cash, "return": p.daily_return or 0}
+            for p in reversed(performance)
+        ])
+
+        fig_perf = go.Figure()
+        fig_perf.add_trace(go.Scatter(
+            x=perf_df["date"], y=perf_df["value"], name="NAV",
+            line=dict(color="#00d4aa", width=2),
+            fill="tozeroy", fillcolor="rgba(0,212,170,0.05)"
+        ))
+        fig_perf.add_hline(y=initial_cash, line_dash="dot", line_color="#334155",
+                           annotation_text="Initial", annotation_font_color="#334155")
+        fig_perf.update_layout(**CHART_LAYOUT, height=300,
+                               title=dict(text="NAV HISTORY", font=dict(size=12, color="#64748b")))
+        st.plotly_chart(fig_perf, use_container_width=True)
+
+        # 日次リターン
+        ret_colors = ["#00d4aa" if r >= 0 else "#ef4444" for r in perf_df["return"]]
+        fig_ret = go.Figure(go.Bar(
+            x=perf_df["date"], y=perf_df["return"], marker_color=ret_colors
+        ))
+        fig_ret.update_layout(**CHART_LAYOUT, height=200,
+                              title=dict(text="DAILY RETURNS %", font=dict(size=12, color="#64748b")))
+        st.plotly_chart(fig_ret, use_container_width=True)
+    else:
+        st.markdown('<div style="text-align:center; padding:40px; color:#334155; font-family:JetBrains Mono;">NO PERFORMANCE DATA</div>', unsafe_allow_html=True)
+
+elif common_view == "LEARNING":
+    # --- LEARNING ---
+    lessons = learning_repo.get_lessons(limit=30)
+    if lessons:
+        wins = sum(1 for l in lessons if l.outcome == "WIN")
+        losses = sum(1 for l in lessons if l.outcome == "LOSS")
+        total = wins + losses
+        win_rate = (wins / total * 100) if total > 0 else 0
+
+        lc1, lc2, lc3 = st.columns(3)
+        lc1.metric("Win Rate", f"{win_rate:.0f}%")
+        lc2.metric("Wins", wins)
+        lc3.metric("Losses", losses)
+
+        for l in lessons:
+            with st.expander(f"[{l.outcome}] {l.lesson or 'No lesson'} — {l.created_at[:10] if l.created_at else ''}"):
+                if l.profit_loss is not None:
+                    st.code(f"P&L: ¥{l.profit_loss:+,.0f}")
+                if l.strategy_adjustment:
+                    st.code(f"Adjustment: {l.strategy_adjustment}")
+    else:
+        st.markdown('<div style="text-align:center; padding:40px; color:#334155; font-family:JetBrains Mono;">NO LEARNING DATA YET</div>', unsafe_allow_html=True)
+
+elif common_view == "SECTORS":
+    # --- SECTORS ---
     st.markdown("#### セクター分析")
 
     # ローテーションシグナル
