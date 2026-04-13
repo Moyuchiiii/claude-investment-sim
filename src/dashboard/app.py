@@ -340,16 +340,27 @@ for market in config["markets"].values():
     if market.get("enabled"):
         all_symbols.extend(market["symbols"])
 
+# セッション状態の初期化
+if "selected_symbol" not in st.session_state:
+    st.session_state.selected_symbol = all_symbols[0] if all_symbols else None
+
 # === サイドバー ===
 with st.sidebar:
     st.markdown("### TERMINAL")
     st.markdown('<div style="font-family:Noto Sans JP; font-size:11px; color:#334155; margin-bottom:16px;">Claude Investment Simulator</div>', unsafe_allow_html=True)
 
+    # session_state と同期したセレクトボックス
+    current_index = all_symbols.index(st.session_state.selected_symbol) if st.session_state.selected_symbol in all_symbols else 0
     selected_symbol = st.selectbox(
         "SYMBOL",
         all_symbols,
+        index=current_index,
         format_func=lambda s: f"{s}  {SYMBOL_NAMES.get(s, '')}"
     )
+    # セレクトボックスの変更を session_state に反映
+    if selected_symbol != st.session_state.selected_symbol:
+        st.session_state.selected_symbol = selected_symbol
+        st.rerun()
 
     chart_period = st.select_slider(
         "PERIOD",
@@ -360,22 +371,42 @@ with st.sidebar:
     st.markdown("---")
     st.markdown("### WATCHLIST")
 
-    # 監視銘柄リスト
+    # 監視銘柄リスト（クリックで銘柄切り替え）
+    st.markdown("""
+    <style>
+        /* ウォッチリストボタンをカード風に */
+        div[data-testid="stSidebar"] .stButton button {
+            background: #111827;
+            border: 1px solid #1e293b;
+            border-radius: 6px;
+            padding: 8px 14px;
+            width: 100%;
+            text-align: left;
+            color: #e2e8f0;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 12px;
+            margin-bottom: 4px;
+            transition: border-color 0.2s;
+        }
+        div[data-testid="stSidebar"] .stButton button:hover {
+            border-color: #00d4aa;
+        }
+    </style>
+    """, unsafe_allow_html=True)
+
     for sym in all_symbols:
         name = SYMBOL_NAMES.get(sym, "")
         price = fetcher.get_current_price(sym)
-        if price:
-            st.markdown(f"""
-            <div class="watchlist-item">
-                <div>
-                    <div class="watchlist-symbol">{sym}</div>
-                    <div class="watchlist-name">{name}</div>
-                </div>
-                <div class="watchlist-price price-flat">
-                    ¥{price:,.0f}
-                </div>
-            </div>
-            """, unsafe_allow_html=True)
+        price_str = f"¥{price:,.0f}" if price else "---"
+        # 選択中の銘柄はハイライト
+        is_selected = sym == st.session_state.selected_symbol
+        label = f"{'▶ ' if is_selected else '  '}{sym}  {name}\n{price_str}"
+        if st.button(label, key=f"watchlist_{sym}"):
+            st.session_state.selected_symbol = sym
+            st.rerun()
+
+# session_state から選択銘柄を参照
+selected_symbol = st.session_state.selected_symbol
 
 # === ヘッダー ===
 st.markdown(f"""
@@ -558,8 +589,8 @@ if selected_symbol:
             fig_rsi.update_layout(
                 **CHART_LAYOUT, height=220,
                 title=dict(text="RSI (14)", font=dict(size=12, color="#64748b")),
-                yaxis=dict(range=[0, 100], gridcolor="#1e293b"),
             )
+            fig_rsi.update_yaxes(range=[0, 100], gridcolor="#1e293b")
             st.plotly_chart(fig_rsi, use_container_width=True)
 
         with col_macd:
