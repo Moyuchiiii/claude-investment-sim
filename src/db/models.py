@@ -67,3 +67,6 @@ class LearningLog:
     lesson: Optional[str]
     strategy_adjustment: Optional[str]
     created_at: datetime
+    tags: Optional[str] = None           # カンマ区切りタグ（例: "sector:金融,indicator:RSI,market:bearish"）
+    symbol: Optional[str] = None         # 関連銘柄コード（例: "8306.T"）
+    market_context: Optional[str] = None # 市場環境（例: "nikkei_down,yen_weak"）

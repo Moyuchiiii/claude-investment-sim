@@ -211,14 +211,27 @@ class PerformanceRepository:
 
 
 class LearningLogRepository:
+    def _row_to_log(self, row) -> LearningLog:
+        """DBの行をLearningLogオブジェクトに変換（新カラムのnullをNoneに統一）"""
+        d = dict(row)
+        d.setdefault("tags", None)
+        d.setdefault("symbol", None)
+        d.setdefault("market_context", None)
+        return LearningLog(**d)
+
     def create(self, trade_id: int, outcome: str, profit_loss: float = None,
-               lesson: str = None, strategy_adjustment: str = None) -> LearningLog:
+               lesson: str = None, strategy_adjustment: str = None,
+               tags: str = None, symbol: str = None,
+               market_context: str = None) -> LearningLog:
         conn = get_connection()
         now = datetime.now().isoformat()
         cursor = conn.execute(
-            """INSERT INTO learning_log (trade_id, outcome, profit_loss, lesson, strategy_adjustment, created_at)
-               VALUES (?, ?, ?, ?, ?, ?)""",
-            (trade_id, outcome, profit_loss, lesson, strategy_adjustment, now)
+            """INSERT INTO learning_log
+               (trade_id, outcome, profit_loss, lesson, strategy_adjustment, created_at,
+                tags, symbol, market_context)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+            (trade_id, outcome, profit_loss, lesson, strategy_adjustment, now,
+             tags, symbol, market_context)
         )
         log_id = cursor.lastrowid
         conn.commit()
@@ -226,7 +239,8 @@ class LearningLogRepository:
         return LearningLog(
             id=log_id, trade_id=trade_id, outcome=outcome,
             profit_loss=profit_loss, lesson=lesson,
-            strategy_adjustment=strategy_adjustment, created_at=now
+            strategy_adjustment=strategy_adjustment, created_at=now,
+            tags=tags, symbol=symbol, market_context=market_context
         )
 
     def get_lessons(self, limit: int = 20) -> list[LearningLog]:
@@ -235,4 +249,34 @@ class LearningLogRepository:
             "SELECT * FROM learning_log ORDER BY created_at DESC LIMIT ?", (limit,)
         ).fetchall()
         conn.close()
-        return [LearningLog(**dict(r)) for r in rows]
+        return [self._row_to_log(r) for r in rows]
+
+    def get_lessons_by_tag(self, tag: str) -> list[LearningLog]:
+        """指定タグを含む教訓を取得（部分一致）"""
+        conn = get_connection()
+        rows = conn.execute(
+            "SELECT * FROM learning_log WHERE tags LIKE ? ORDER BY created_at DESC",
+            (f"%{tag}%",)
+        ).fetchall()
+        conn.close()
+        return [self._row_to_log(r) for r in rows]
+
+    def get_lessons_by_symbol(self, symbol: str) -> list[LearningLog]:
+        """指定銘柄に関連する教訓を取得"""
+        conn = get_connection()
+        rows = conn.execute(
+            "SELECT * FROM learning_log WHERE symbol = ? ORDER BY created_at DESC",
+            (symbol,)
+        ).fetchall()
+        conn.close()
+        return [self._row_to_log(r) for r in rows]
+
+    def get_lessons_by_context(self, context: str) -> list[LearningLog]:
+        """指定市場コンテキストを含む教訓を取得（部分一致）"""
+        conn = get_connection()
+        rows = conn.execute(
+            "SELECT * FROM learning_log WHERE market_context LIKE ? ORDER BY created_at DESC",
+            (f"%{context}%",)
+        ).fetchall()
+        conn.close()
+        return [self._row_to_log(r) for r in rows]

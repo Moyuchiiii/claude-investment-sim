@@ -100,4 +100,18 @@ def migrate():
             # カラムが既に存在する場合はスキップ
             pass
 
+    # learning_log テーブルにタグ・銘柄・市場コンテキストカラムを追加（既存DBへの追加対応）
+    for column_def in [
+        ("tags", "TEXT"),
+        ("symbol", "TEXT"),
+        ("market_context", "TEXT"),
+    ]:
+        col_name, col_type = column_def
+        try:
+            conn.execute(f"ALTER TABLE learning_log ADD COLUMN {col_name} {col_type}")
+            conn.commit()
+        except Exception:
+            # カラムが既に存在する場合はスキップ
+            pass
+
     conn.close()
