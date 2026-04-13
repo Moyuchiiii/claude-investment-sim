@@ -17,7 +17,7 @@ markets:
       - 9432.T   # NTT
       - 6902.T   # デンソー
   us:
-    enabled: true
+    enabled: false
     symbols:
       - AAPL
       - MSFT
