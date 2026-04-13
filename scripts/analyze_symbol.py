@@ -9,6 +9,7 @@ from src.data.fetcher import StockFetcher
 from src.data.indicators import TechnicalIndicators
 from src.data.fundamentals import FundamentalData
 from src.data.news import NewsCollector
+from src.data.market import MarketIndicators
 
 SYMBOL_NAMES = {
     "7203.T": "トヨタ自動車",
@@ -64,6 +65,7 @@ def main():
     indicators = TechnicalIndicators()
     fundamentals_fetcher = FundamentalData()
     news_collector = NewsCollector()
+    market_indicators = MarketIndicators()
 
     history = fetcher.get_history(symbol, period=period)
     if history.empty:
@@ -105,6 +107,9 @@ def main():
             except (TypeError, ValueError):
                 clean_tech[k] = str(v)
 
+    # 出来高異常検知
+    volume_anomaly = market_indicators.check_volume_anomaly(symbol)
+
     result = {
         "symbol": symbol,
         "symbol_name": SYMBOL_NAMES.get(symbol, symbol),
@@ -115,6 +120,7 @@ def main():
         "fundamental_signals": fundamental_signals,
         "news": news_articles,
         "news_sentiment": news_sentiment,
+        "volume_anomaly": volume_anomaly,
     }
 
     print(json.dumps(result, ensure_ascii=False, indent=2))

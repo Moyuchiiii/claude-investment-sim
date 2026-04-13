@@ -10,6 +10,7 @@ from src.engine.portfolio import PortfolioManager
 from src.engine.risk import RiskManager
 from src.db.repository import TradeRepository, LearningLogRepository, TaxRepository
 from src.data.sectors import SectorAnalyzer, SECTOR_MAP
+from src.data.market import MarketIndicators
 
 SYMBOL_NAMES = {
     "7203.T": "トヨタ自動車",
@@ -60,6 +61,7 @@ def main():
     learning_repo = LearningLogRepository()
     tax_repo = TaxRepository()
     sector_analyzer = SectorAnalyzer()
+    market_indicators = MarketIndicators()
 
     status = portfolio_mgr.get_status()
     if "error" in status:
@@ -108,6 +110,10 @@ def main():
     # セクター分析を取得
     sector_analysis = sector_analyzer.get_sector_summary()
 
+    # マーケット全体指標を取得
+    market_overview = market_indicators.get_market_overview()
+    market_signals = market_indicators.get_market_signal(market_overview)
+
     result = {
         "portfolio": status,
         "risk_alerts": alerts,
@@ -120,6 +126,8 @@ def main():
             "loss_carryforward": loss_carryforward,
         },
         "sector_analysis": sector_analysis,
+        "market_overview": market_overview,
+        "market_signals": market_signals,
     }
 
     print(json.dumps(result, ensure_ascii=False, indent=2, default=str))
