@@ -950,13 +950,16 @@ with tab6:
             for article in stock_news:
                 source = article.get("source", "")
                 published = article.get("published", "")[:10] if article.get("published") else ""
+                link = article.get("link", "")
                 st.markdown(f"""
-                <div style="background:#111827; border:1px solid #1e293b; border-radius:6px; padding:10px 14px; margin-bottom:6px;">
+                <a href="{link}" target="_blank" style="text-decoration:none;">
+                <div style="background:#111827; border:1px solid #1e293b; border-radius:6px; padding:10px 14px; margin-bottom:6px; transition:border-color 0.2s; cursor:pointer;" onmouseover="this.style.borderColor='#00d4aa'" onmouseout="this.style.borderColor='#1e293b'">
                     <div style="font-family:'Noto Sans JP'; font-size:13px; color:#e2e8f0;">{article['title']}</div>
                     <div style="font-family:'JetBrains Mono'; font-size:10px; color:#64748b; margin-top:4px;">
-                        {source} — {published}
+                        {source} — {published} ↗
                     </div>
                 </div>
+                </a>
                 """, unsafe_allow_html=True)
         else:
             st.info("ニュースを取得できませんでした")
@@ -982,14 +985,27 @@ with tab6:
             for article in market_news:
                 source = article.get("source", "")
                 published = article.get("published", "")[:10] if article.get("published") else ""
-                st.markdown(f"""
-                <div style="background:#111827; border:1px solid #1e293b; border-radius:6px; padding:10px 14px; margin-bottom:6px;">
-                    <div style="font-family:'Noto Sans JP'; font-size:13px; color:#e2e8f0;">{article['title']}</div>
-                    <div style="font-family:'JetBrains Mono'; font-size:10px; color:#64748b; margin-top:4px;">
-                        {source} — {published}
+                link = article.get("link", "")
+                if link:
+                    st.markdown(f"""
+                    <a href="{link}" target="_blank" style="text-decoration:none;">
+                    <div style="background:#111827; border:1px solid #1e293b; border-radius:6px; padding:10px 14px; margin-bottom:6px; transition:border-color 0.2s; cursor:pointer;" onmouseover="this.style.borderColor='#00d4aa'" onmouseout="this.style.borderColor='#1e293b'">
+                        <div style="font-family:'Noto Sans JP'; font-size:13px; color:#e2e8f0;">{article['title']}</div>
+                        <div style="font-family:'JetBrains Mono'; font-size:10px; color:#64748b; margin-top:4px;">
+                            {source} — {published} ↗
+                        </div>
                     </div>
-                </div>
-                """, unsafe_allow_html=True)
+                    </a>
+                    """, unsafe_allow_html=True)
+                else:
+                    st.markdown(f"""
+                    <div style="background:#111827; border:1px solid #1e293b; border-radius:6px; padding:10px 14px; margin-bottom:6px;">
+                        <div style="font-family:'Noto Sans JP'; font-size:13px; color:#e2e8f0;">{article['title']}</div>
+                        <div style="font-family:'JetBrains Mono'; font-size:10px; color:#64748b; margin-top:4px;">
+                            {source} — {published}
+                        </div>
+                    </div>
+                    """, unsafe_allow_html=True)
         else:
             st.info("市場ニュースを取得できませんでした")
 
