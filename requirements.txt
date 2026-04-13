@@ -9,3 +9,4 @@ plotly>=5.18.0
 pyyaml>=6.0.1
 python-dotenv>=1.0.1
 pytest>=8.0.0
+feedparser>=6.0.0

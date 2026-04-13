@@ -8,6 +8,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 from src.data.fetcher import StockFetcher
 from src.data.indicators import TechnicalIndicators
 from src.data.fundamentals import FundamentalData
+from src.data.news import NewsCollector
 
 SYMBOL_NAMES = {
     "7203.T": "トヨタ自動車",
@@ -34,6 +35,7 @@ def main():
     fetcher = StockFetcher()
     indicators = TechnicalIndicators()
     fundamentals_fetcher = FundamentalData()
+    news_collector = NewsCollector()
 
     history = fetcher.get_history(symbol, period=period)
     if history.empty:
@@ -46,6 +48,11 @@ def main():
     # ファンダメンタルズデータを取得
     fundamentals = fundamentals_fetcher.get_fundamentals(symbol)
     fundamental_signals = fundamentals_fetcher.get_valuation_signal(fundamentals)
+
+    # ニュースを取得してセンチメント分析
+    news_articles = news_collector.get_news(symbol)
+    headlines = [article["title"] for article in news_articles]
+    news_sentiment = news_collector.analyze_sentiment_simple(headlines)
 
     # 最新のローソク足データを取得
     market_data = {
@@ -78,6 +85,8 @@ def main():
         "signals": signals,
         "fundamentals": fundamentals,
         "fundamental_signals": fundamental_signals,
+        "news": news_articles,
+        "news_sentiment": news_sentiment,
     }
 
     print(json.dumps(result, ensure_ascii=False, indent=2))
