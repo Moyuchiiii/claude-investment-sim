@@ -117,6 +117,7 @@ class NewsCollector:
                     "title": entry.title,
                     "source": entry.get("source", {}).get("title", "不明"),
                     "published": published,
+                    "link": entry.link,
                 })
 
             self.cache.set("news", "market", articles)
