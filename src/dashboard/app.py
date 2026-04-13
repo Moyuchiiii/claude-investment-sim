@@ -429,7 +429,7 @@ with st.sidebar:
     st.markdown("### WATCHLIST")
 
     # 全銘柄の価格を一括取得（キャッシュ60秒）
-    @st.cache_data(ttl=60)
+    @st.cache_data(ttl=60, show_spinner=False)
     def get_watchlist_prices(symbols: tuple) -> dict:
         return fetcher.get_multiple_prices(list(symbols))
 
