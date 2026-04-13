@@ -30,7 +30,21 @@ class Trade:
     total_amount: float
     reasoning: Optional[str]
     confidence: Optional[float]
-    executed_at: datetime
+    commission: float = 0.0    # 売買手数料
+    slippage: float = 0.0      # スリッページ額
+    tax: float = 0.0           # 譲渡益税
+    executed_at: Optional[str] = None
+
+
+@dataclass
+class TaxRecord:
+    id: int
+    trade_id: Optional[int]
+    tax_type: str              # 'capital_gains' or 'dividend'
+    taxable_amount: float      # 課税対象額
+    tax_amount: float          # 税額
+    fiscal_year: int           # 課税年度
+    created_at: Optional[str] = None
 
 
 @dataclass

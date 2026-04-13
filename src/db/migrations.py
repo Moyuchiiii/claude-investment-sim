@@ -18,6 +18,17 @@ def migrate():
     cursor = conn.cursor()
 
     cursor.executescript("""
+    CREATE TABLE IF NOT EXISTS tax_records (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        trade_id INTEGER,
+        tax_type TEXT NOT NULL,
+        taxable_amount REAL NOT NULL,
+        tax_amount REAL NOT NULL,
+        fiscal_year INTEGER NOT NULL,
+        created_at TEXT DEFAULT (datetime('now', 'localtime')),
+        FOREIGN KEY (trade_id) REFERENCES trades(id)
+    );
+
     CREATE TABLE IF NOT EXISTS portfolio (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         cash REAL NOT NULL,
@@ -74,4 +85,19 @@ def migrate():
     """)
 
     conn.commit()
+
+    # trades テーブルにコスト追跡カラムを追加（既存DBへの追加対応）
+    for column_def in [
+        ("commission", "REAL DEFAULT 0"),
+        ("slippage", "REAL DEFAULT 0"),
+        ("tax", "REAL DEFAULT 0"),
+    ]:
+        col_name, col_type = column_def
+        try:
+            conn.execute(f"ALTER TABLE trades ADD COLUMN {col_name} {col_type}")
+            conn.commit()
+        except Exception:
+            # カラムが既に存在する場合はスキップ
+            pass
+
     conn.close()

@@ -50,3 +50,11 @@ learning:
   review_interval_days: 7      # 週次レビュー
   lookback_trades: 50          # 学習に使う直近トレード数
   min_trades_for_learning: 10  # 学習開始に必要な最低トレード数
+
+costs:
+  commission_rate: 0.0          # 売買手数料率（SBI・楽天ゼロコミッション）
+  commission_min: 0             # 最低手数料
+  slippage_rate: 0.0005         # スリッページ 0.05%（大型株）
+  tax_rate: 0.20315             # 譲渡益課税 20.315%
+  enable_tax: true              # 税金計算を有効にする
+  enable_slippage: true         # スリッページを有効にする

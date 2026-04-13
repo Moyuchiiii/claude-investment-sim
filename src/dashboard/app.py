@@ -15,7 +15,7 @@ from datetime import datetime
 
 from src.db.repository import (
     PortfolioRepository, HoldingRepository, TradeRepository,
-    PerformanceRepository, LearningLogRepository
+    PerformanceRepository, LearningLogRepository, TaxRepository
 )
 from src.data.fetcher import StockFetcher
 from src.data.indicators import TechnicalIndicators
@@ -313,6 +313,7 @@ holding_repo = HoldingRepository()
 trade_repo = TradeRepository()
 performance_repo = PerformanceRepository()
 learning_repo = LearningLogRepository()
+tax_repo = TaxRepository()
 fetcher = StockFetcher()
 indicators_calc = TechnicalIndicators()
 config = load_config()
@@ -432,7 +433,7 @@ total_value = portfolio.cash + holdings_value
 initial_cash = config["portfolio"]["initial_cash"]
 total_return = (total_value / initial_cash - 1) * 100
 
-col1, col2, col3, col4 = st.columns(4)
+col1, col2, col3, col4, col5 = st.columns(5)
 with col1:
     delta_class = "metric-delta-up" if total_return >= 0 else "metric-delta-down"
     delta_sign = "+" if total_return >= 0 else ""
@@ -468,6 +469,19 @@ with col4:
         <div class="metric-label">本日の取引</div>
         <div class="metric-value">{today_count}</div>
         <div class="metric-delta-up">/ {config['trading']['max_daily_trades']} MAX</div>
+    </div>
+    """, unsafe_allow_html=True)
+with col5:
+    # 今年の YTD 税金サマリー
+    ytd_tax_summary = tax_repo.get_yearly_summary(datetime.now().year)
+    ytd_tax = ytd_tax_summary["total_tax"]
+    ytd_gains = ytd_tax_summary["total_taxable"]
+    tax_color = "metric-delta-down" if ytd_tax > 0 else "metric-delta-up"
+    st.markdown(f"""
+    <div class="metric-card">
+        <div class="metric-label">YTD税金</div>
+        <div class="metric-value">¥{ytd_tax:,.0f}</div>
+        <div class="{tax_color}">実現益 ¥{ytd_gains:+,.0f}</div>
     </div>
     """, unsafe_allow_html=True)
 
@@ -715,25 +729,33 @@ with tab2:
     if trades:
         trades_data = []
         for t in trades:
-            action_color = "#00d4aa" if t.action == "BUY" else "#ef4444"
             trades_data.append({
                 "日時": t.executed_at[:16] if t.executed_at else "",
                 "銘柄": f"{t.symbol} {SYMBOL_NAMES.get(t.symbol, '')}",
                 "売買": t.action,
                 "数量": t.quantity,
-                "価格": f"¥{t.price:,.0f}",
+                "実行価格": f"¥{t.price:,.2f}",
                 "金額": f"¥{t.total_amount:,.0f}",
+                "手数料": f"¥{t.commission:,.0f}" if t.commission else "¥0",
+                "スリッページ": f"¥{t.slippage:,.0f}" if t.slippage else "¥0",
+                "税金": f"¥{t.tax:,.0f}" if t.tax else "¥0",
                 "確信度": f"{t.confidence:.0%}" if t.confidence else "-",
-                "理由": (t.reasoning or "")[:60]
+                "理由": (t.reasoning or "")[:50]
             })
         st.dataframe(pd.DataFrame(trades_data), use_container_width=True, hide_index=True)
 
         buy_count = sum(1 for t in trades if t.action == "BUY")
         sell_count = sum(1 for t in trades if t.action == "SELL")
-        tc1, tc2, tc3 = st.columns(3)
+        total_commission = sum(t.commission or 0 for t in trades)
+        total_slippage = sum(t.slippage or 0 for t in trades)
+        total_tax = sum(t.tax or 0 for t in trades)
+        tc1, tc2, tc3, tc4, tc5, tc6 = st.columns(6)
         tc1.metric("総取引", len(trades))
         tc2.metric("BUY", buy_count)
         tc3.metric("SELL", sell_count)
+        tc4.metric("手数料合計", f"¥{total_commission:,.0f}")
+        tc5.metric("スリッページ合計", f"¥{total_slippage:,.0f}")
+        tc6.metric("税金合計", f"¥{total_tax:,.0f}")
     else:
         st.markdown('<div style="text-align:center; padding:40px; color:#334155; font-family:JetBrains Mono;">NO TRADES YET</div>', unsafe_allow_html=True)
 

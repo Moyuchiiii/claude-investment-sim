@@ -26,7 +26,19 @@ def main():
     else:
         result = executor.execute_sell(args.symbol, args.quantity, args.reasoning, args.confidence)
 
-    print(json.dumps(result, ensure_ascii=False, indent=2, default=str))
+    # コスト内訳を見やすく整形して出力
+    if result.get("success"):
+        output = dict(result)
+        # BUY/SELL 共通フィールドを先頭に並べ替え
+        ordered = {
+            "success": output.pop("success"),
+            "symbol": output.pop("symbol"),
+            "action": output.pop("action"),
+        }
+        ordered.update(output)
+        print(json.dumps(ordered, ensure_ascii=False, indent=2, default=str))
+    else:
+        print(json.dumps(result, ensure_ascii=False, indent=2, default=str))
 
     # 取引成功時に日次パフォーマンスを記録
     if result.get("success"):

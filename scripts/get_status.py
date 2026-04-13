@@ -1,13 +1,14 @@
 """ポートフォリオ状況をJSON出力"""
 import sys
 import json
+from datetime import datetime
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from src.engine.portfolio import PortfolioManager
 from src.engine.risk import RiskManager
-from src.db.repository import TradeRepository, LearningLogRepository
+from src.db.repository import TradeRepository, LearningLogRepository, TaxRepository
 
 SYMBOL_NAMES = {
     "7203.T": "トヨタ自動車",
@@ -28,6 +29,7 @@ def main():
     risk_mgr = RiskManager()
     trade_repo = TradeRepository()
     learning_repo = LearningLogRepository()
+    tax_repo = TaxRepository()
 
     status = portfolio_mgr.get_status()
     if "error" in status:
@@ -64,11 +66,22 @@ def main():
         for l in lessons
     ]
 
+    # 今年の税金サマリーを取得
+    current_year = datetime.now().year
+    tax_summary = tax_repo.get_yearly_summary(current_year)
+    loss_carryforward = tax_repo.get_loss_carryforward(current_year)
+
     result = {
         "portfolio": status,
         "risk_alerts": alerts,
         "recent_trades": trades_data,
         "lessons": lessons_data,
+        "tax_summary": {
+            "year": current_year,
+            "ytd_realized_gains": tax_summary["total_taxable"],
+            "ytd_tax_paid": tax_summary["total_tax"],
+            "loss_carryforward": loss_carryforward,
+        },
     }
 
     print(json.dumps(result, ensure_ascii=False, indent=2, default=str))

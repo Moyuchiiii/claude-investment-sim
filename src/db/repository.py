@@ -2,7 +2,7 @@ import sqlite3
 from datetime import datetime, date
 from typing import Optional
 from .migrations import get_connection
-from .models import Portfolio, Holding, Trade, Performance, LearningLog
+from .models import Portfolio, Holding, Trade, Performance, LearningLog, TaxRecord
 
 
 class PortfolioRepository:
@@ -82,14 +82,18 @@ class HoldingRepository:
 
 class TradeRepository:
     def create(self, symbol: str, action: str, quantity: int, price: float,
-               reasoning: str = None, confidence: float = None) -> Trade:
+               reasoning: str = None, confidence: float = None,
+               commission: float = 0.0, slippage: float = 0.0, tax: float = 0.0) -> Trade:
         conn = get_connection()
         total_amount = quantity * price
         now = datetime.now().isoformat()
         cursor = conn.execute(
-            """INSERT INTO trades (symbol, action, quantity, price, total_amount, reasoning, confidence, executed_at)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
-            (symbol, action, quantity, price, total_amount, reasoning, confidence, now)
+            """INSERT INTO trades
+               (symbol, action, quantity, price, total_amount, reasoning, confidence,
+                commission, slippage, tax, executed_at)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+            (symbol, action, quantity, price, total_amount, reasoning, confidence,
+             commission, slippage, tax, now)
         )
         trade_id = cursor.lastrowid
         conn.commit()
@@ -97,7 +101,8 @@ class TradeRepository:
         return Trade(
             id=trade_id, symbol=symbol, action=action, quantity=quantity,
             price=price, total_amount=total_amount, reasoning=reasoning,
-            confidence=confidence, executed_at=now
+            confidence=confidence, commission=commission, slippage=slippage,
+            tax=tax, executed_at=now
         )
 
     def get_recent(self, limit: int = 50) -> list[Trade]:
@@ -106,7 +111,7 @@ class TradeRepository:
             "SELECT * FROM trades ORDER BY executed_at DESC LIMIT ?", (limit,)
         ).fetchall()
         conn.close()
-        return [Trade(**dict(r)) for r in rows]
+        return [self._row_to_trade(r) for r in rows]
 
     def get_by_symbol(self, symbol: str) -> list[Trade]:
         conn = get_connection()
@@ -114,7 +119,72 @@ class TradeRepository:
             "SELECT * FROM trades WHERE symbol = ? ORDER BY executed_at DESC", (symbol,)
         ).fetchall()
         conn.close()
-        return [Trade(**dict(r)) for r in rows]
+        return [self._row_to_trade(r) for r in rows]
+
+    def _row_to_trade(self, row) -> Trade:
+        """DBの行をTradeオブジェクトに変換（コスト追跡カラムのnullを0.0に変換）"""
+        d = dict(row)
+        d.setdefault("commission", 0.0)
+        d.setdefault("slippage", 0.0)
+        d.setdefault("tax", 0.0)
+        if d["commission"] is None:
+            d["commission"] = 0.0
+        if d["slippage"] is None:
+            d["slippage"] = 0.0
+        if d["tax"] is None:
+            d["tax"] = 0.0
+        return Trade(**d)
+
+
+class TaxRepository:
+    def create(self, trade_id: Optional[int], tax_type: str,
+               taxable_amount: float, tax_amount: float, fiscal_year: int) -> TaxRecord:
+        conn = get_connection()
+        now = datetime.now().isoformat()
+        cursor = conn.execute(
+            """INSERT INTO tax_records
+               (trade_id, tax_type, taxable_amount, tax_amount, fiscal_year, created_at)
+               VALUES (?, ?, ?, ?, ?, ?)""",
+            (trade_id, tax_type, taxable_amount, tax_amount, fiscal_year, now)
+        )
+        record_id = cursor.lastrowid
+        conn.commit()
+        conn.close()
+        return TaxRecord(
+            id=record_id, trade_id=trade_id, tax_type=tax_type,
+            taxable_amount=taxable_amount, tax_amount=tax_amount,
+            fiscal_year=fiscal_year, created_at=now
+        )
+
+    def get_yearly_summary(self, year: int) -> dict:
+        """指定年の税金サマリーを返す"""
+        conn = get_connection()
+        row = conn.execute(
+            """SELECT
+               SUM(taxable_amount) as total_taxable,
+               SUM(tax_amount) as total_tax
+               FROM tax_records
+               WHERE fiscal_year = ?""",
+            (year,)
+        ).fetchone()
+        conn.close()
+        return {
+            "year": year,
+            "total_taxable": row["total_taxable"] or 0.0,
+            "total_tax": row["total_tax"] or 0.0,
+        }
+
+    def get_loss_carryforward(self, year: int) -> float:
+        """指定年の損失繰越額を返す（taxable_amountが負の合計）"""
+        conn = get_connection()
+        row = conn.execute(
+            """SELECT SUM(taxable_amount) as net_pnl
+               FROM tax_records
+               WHERE fiscal_year = ? AND taxable_amount < 0""",
+            (year,)
+        ).fetchone()
+        conn.close()
+        return row["net_pnl"] or 0.0
 
 
 class PerformanceRepository:
