@@ -2,6 +2,7 @@
 import sys
 import json
 import argparse
+import time
 from pathlib import Path
 from datetime import datetime, timedelta
 
@@ -11,6 +12,27 @@ import yfinance as yf
 import yaml
 from tqdm import tqdm
 from src.data.indicators import TechnicalIndicators
+
+# レート制限対策
+RETRY_MAX = 3
+RETRY_WAIT = 30  # 秒
+SYMBOL_DELAY = 0.3  # 銘柄間のウェイト（秒）
+MONTH_DELAY = 2  # 月間のウェイト（秒）
+
+
+def fetch_with_retry(func, *args, **kwargs):
+    """yfinance呼び出しをリトライ付きで実行"""
+    for attempt in range(RETRY_MAX):
+        try:
+            return func(*args, **kwargs)
+        except Exception as e:
+            if "Rate" in str(e) or "429" in str(e) or "Too Many" in str(e):
+                wait = RETRY_WAIT * (attempt + 1)
+                print(f"\n  Rate limited. Waiting {wait}s... (attempt {attempt + 1}/{RETRY_MAX})")
+                time.sleep(wait)
+            else:
+                raise
+    return None
 
 # ファンダメンタルズで取得するフィールドとyfinance info キーのマッピング
 FUNDAMENTALS_FIELDS = {
@@ -103,11 +125,15 @@ def generate_monthly_snapshots(year: int, month: int):
                        leave=False):
 
         try:
+            time.sleep(SYMBOL_DELAY)
             ticker = yf.Ticker(symbol)
-            hist = ticker.history(start=fetch_start.strftime("%Y-%m-%d"),
-                                  end=(end_date + timedelta(days=1)).strftime("%Y-%m-%d"))
+            hist = fetch_with_retry(
+                ticker.history,
+                start=fetch_start.strftime("%Y-%m-%d"),
+                end=(end_date + timedelta(days=1)).strftime("%Y-%m-%d")
+            )
 
-            if hist.empty or len(hist) < 30:
+            if hist is None or hist.empty or len(hist) < 30:
                 continue
 
             # ファンダメンタルズはこのシンボルの月内全週で使い回す（週次で変わらないため）
@@ -208,17 +234,21 @@ def generate_outcome(year: int, month: int):
 
     outcomes = []
 
-    for snap in snapshots:
+    for snap in tqdm(snapshots, desc=f"  {month_str} outcomes", unit="件",
+                      bar_format="  {l_bar}{bar:30}{r_bar}", leave=False):
         symbol = snap["symbol"]
         snap_date = snap["date"]
 
         try:
+            time.sleep(SYMBOL_DELAY)
             ticker = yf.Ticker(symbol)
-            # スナップショット日から翌月末までのデータ
-            hist = ticker.history(start=snap_date,
-                                  end=(next_month_end + timedelta(days=1)).strftime("%Y-%m-%d"))
+            hist = fetch_with_retry(
+                ticker.history,
+                start=snap_date,
+                end=(next_month_end + timedelta(days=1)).strftime("%Y-%m-%d")
+            )
 
-            if hist.empty or len(hist) < 2:
+            if hist is None or hist.empty or len(hist) < 2:
                 continue
 
             entry_price = snap["market_data"]["close"]
@@ -300,6 +330,7 @@ def main():
     parser.add_argument("--month", type=int, required=True, help="月 (例: 4)")
     parser.add_argument("--outcomes", action="store_true", help="答え合わせデータも生成")
     parser.add_argument("--range", type=int, default=1, help="何ヶ月分生成するか (例: 6)")
+    parser.add_argument("--skip-existing", action="store_true", help="既に正常なファイルがあればスキップ")
     args = parser.parse_args()
 
     # 月リストを先に作成
@@ -321,21 +352,40 @@ def main():
     print(f"  {total}ヶ月 × {len(get_all_symbols())}銘柄 = {total * len(get_all_symbols())}セット")
     print(f"{'='*60}\n")
 
+    def is_valid_file(path):
+        """ファイルが存在し、中身が空でないか確認"""
+        return path.exists() and path.stat().st_size > 100
+
     with tqdm(total=total_steps, desc="全体進捗", unit="step",
               bar_format="{l_bar}{bar:40}{r_bar}",
               colour="green") as pbar:
         for idx, (y, m) in enumerate(months):
             month_str = f"{y}-{m:02d}"
+            snap_path = SNAPSHOT_DIR / f"{month_str}.json"
+            outcome_path = SNAPSHOT_DIR / f"{month_str}_outcomes.json"
+
             save_progress(month_str, total, idx, "generating")
 
-            pbar.set_postfix_str(f"{month_str} スナップショット")
-            generate_monthly_snapshots(y, m)
-            pbar.update(1)
-
-            if args.outcomes:
-                pbar.set_postfix_str(f"{month_str} アウトカム")
-                generate_outcome(y, m)
+            # スナップショット生成（既存スキップ対応）
+            if args.skip_existing and is_valid_file(snap_path):
+                pbar.set_postfix_str(f"{month_str} skip")
                 pbar.update(1)
+            else:
+                pbar.set_postfix_str(f"{month_str} snapshots")
+                generate_monthly_snapshots(y, m)
+                pbar.update(1)
+                time.sleep(MONTH_DELAY)
+
+            # アウトカム生成
+            if args.outcomes:
+                if args.skip_existing and is_valid_file(outcome_path):
+                    pbar.set_postfix_str(f"{month_str} skip outcomes")
+                    pbar.update(1)
+                else:
+                    pbar.set_postfix_str(f"{month_str} outcomes")
+                    generate_outcome(y, m)
+                    pbar.update(1)
+                    time.sleep(MONTH_DELAY)
 
     save_progress("完了", total, total, "completed")
     print(f"\n{'='*60}")
