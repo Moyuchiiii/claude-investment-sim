@@ -16,6 +16,7 @@ from src.db.repository import (
     PerformanceRepository, LearningLogRepository
 )
 from src.data.fetcher import StockFetcher
+from src.data.indicators import TechnicalIndicators
 
 CONFIG_PATH = Path(__file__).parent.parent.parent / "config.yaml"
 
@@ -40,6 +41,7 @@ trade_repo = TradeRepository()
 performance_repo = PerformanceRepository()
 learning_repo = LearningLogRepository()
 fetcher = StockFetcher()
+indicators_calc = TechnicalIndicators()
 config = load_config()
 
 # サイドバー
@@ -75,7 +77,7 @@ col4.metric("保有銘柄数", f"{len(holdings)}銘柄")
 st.divider()
 
 # === タブ構成 ===
-tab1, tab2, tab3, tab4 = st.tabs(["📊 パフォーマンス", "💼 ポートフォリオ", "📝 取引履歴", "🧠 学習ログ"])
+tab1, tab2, tab5, tab3, tab4 = st.tabs(["📊 パフォーマンス", "💼 ポートフォリオ", "📈 銘柄チャート", "📝 取引履歴", "🧠 学習ログ"])
 
 # --- パフォーマンスタブ ---
 with tab1:
@@ -163,6 +165,156 @@ with tab2:
         st.plotly_chart(fig_pie, use_container_width=True)
     else:
         st.info("保有銘柄はありません。")
+
+# --- 銘柄チャートタブ ---
+with tab5:
+    # 全銘柄リストを構築
+    all_symbols = []
+    for market_name, market in config["markets"].items():
+        if market.get("enabled"):
+            all_symbols.extend(market["symbols"])
+
+    selected_symbol = st.selectbox("銘柄を選択", all_symbols)
+    chart_period = st.select_slider(
+        "期間", options=["1mo", "3mo", "6mo", "1y", "2y"], value="3mo"
+    )
+
+    if selected_symbol:
+        history = fetcher.get_history(selected_symbol, period=chart_period)
+
+        if not history.empty and len(history) > 5:
+            import ta as ta_lib
+
+            # ローソク足 + ボリンジャーバンド（メインチャート）
+            fig = go.Figure()
+
+            # ローソク足
+            fig.add_trace(go.Candlestick(
+                x=history.index, open=history["Open"], high=history["High"],
+                low=history["Low"], close=history["Close"], name="価格",
+                increasing_line_color="#26A69A", decreasing_line_color="#EF5350"
+            ))
+
+            # ボリンジャーバンド
+            bb_upper = ta_lib.volatility.bollinger_hband(history["Close"])
+            bb_lower = ta_lib.volatility.bollinger_lband(history["Close"])
+            bb_mid = ta_lib.volatility.bollinger_mavg(history["Close"])
+
+            fig.add_trace(go.Scatter(
+                x=history.index, y=bb_upper, name="BB上限",
+                line=dict(color="rgba(255,255,255,0.2)", width=1)
+            ))
+            fig.add_trace(go.Scatter(
+                x=history.index, y=bb_lower, name="BB下限",
+                line=dict(color="rgba(255,255,255,0.2)", width=1),
+                fill="tonexty", fillcolor="rgba(255,255,255,0.05)"
+            ))
+            fig.add_trace(go.Scatter(
+                x=history.index, y=bb_mid, name="BB中央",
+                line=dict(color="rgba(255,255,255,0.3)", width=1, dash="dot")
+            ))
+
+            # SMA
+            sma20 = ta_lib.trend.sma_indicator(history["Close"], window=20)
+            sma50 = ta_lib.trend.sma_indicator(history["Close"], window=50)
+            fig.add_trace(go.Scatter(
+                x=history.index, y=sma20, name="SMA20",
+                line=dict(color="#FFA726", width=1)
+            ))
+            fig.add_trace(go.Scatter(
+                x=history.index, y=sma50, name="SMA50",
+                line=dict(color="#42A5F5", width=1)
+            ))
+
+            fig.update_layout(
+                title=f"{selected_symbol} — ローソク足チャート",
+                yaxis_title="価格", template="plotly_dark",
+                xaxis_rangeslider_visible=False, height=500
+            )
+            st.plotly_chart(fig, use_container_width=True)
+
+            # 出来高
+            vol_colors = [
+                "#26A69A" if c >= o else "#EF5350"
+                for c, o in zip(history["Close"], history["Open"])
+            ]
+            fig_vol = go.Figure()
+            fig_vol.add_trace(go.Bar(
+                x=history.index, y=history["Volume"],
+                marker_color=vol_colors, name="出来高"
+            ))
+            fig_vol.update_layout(
+                title="出来高", yaxis_title="出来高",
+                template="plotly_dark", height=200
+            )
+            st.plotly_chart(fig_vol, use_container_width=True)
+
+            # RSI
+            rsi = ta_lib.momentum.rsi(history["Close"], window=14)
+            fig_rsi = go.Figure()
+            fig_rsi.add_trace(go.Scatter(
+                x=history.index, y=rsi, name="RSI(14)",
+                line=dict(color="#AB47BC", width=2)
+            ))
+            fig_rsi.add_hline(y=70, line_dash="dash", line_color="#EF5350",
+                              annotation_text="買われすぎ")
+            fig_rsi.add_hline(y=30, line_dash="dash", line_color="#26A69A",
+                              annotation_text="売られすぎ")
+            fig_rsi.add_hrect(y0=30, y1=70, fillcolor="rgba(255,255,255,0.03)",
+                              line_width=0)
+            fig_rsi.update_layout(
+                title="RSI（14日）", yaxis_title="RSI",
+                yaxis=dict(range=[0, 100]),
+                template="plotly_dark", height=250
+            )
+            st.plotly_chart(fig_rsi, use_container_width=True)
+
+            # MACD
+            macd_line = ta_lib.trend.macd(history["Close"])
+            macd_signal = ta_lib.trend.macd_signal(history["Close"])
+            macd_hist = ta_lib.trend.macd_diff(history["Close"])
+
+            fig_macd = go.Figure()
+            fig_macd.add_trace(go.Scatter(
+                x=history.index, y=macd_line, name="MACD",
+                line=dict(color="#42A5F5", width=2)
+            ))
+            fig_macd.add_trace(go.Scatter(
+                x=history.index, y=macd_signal, name="シグナル",
+                line=dict(color="#FFA726", width=2)
+            ))
+            macd_colors = ["#26A69A" if v >= 0 else "#EF5350" for v in macd_hist]
+            fig_macd.add_trace(go.Bar(
+                x=history.index, y=macd_hist, name="ヒストグラム",
+                marker_color=macd_colors
+            ))
+            fig_macd.update_layout(
+                title="MACD", yaxis_title="MACD",
+                template="plotly_dark", height=250
+            )
+            st.plotly_chart(fig_macd, use_container_width=True)
+
+            # テクニカル指標サマリー
+            tech = indicators_calc.calculate_all(history)
+            if "error" not in tech:
+                signals = indicators_calc.get_signals(tech)
+                st.subheader("テクニカル指標サマリー")
+                col1, col2, col3, col4 = st.columns(4)
+                col1.metric("RSI(14)", f"{tech['rsi_14']:.1f}")
+                col2.metric("MACD", f"{tech['macd']:.2f}")
+                col3.metric("ADX(14)", f"{tech['adx_14']:.1f}")
+                col4.metric("ATR(14)", f"{tech['atr_14']:.2f}")
+
+                st.subheader("シグナル")
+                for s in signals:
+                    if "買い" in s or "上昇" in s:
+                        st.success(s)
+                    elif "売り" in s or "下降" in s:
+                        st.error(s)
+                    else:
+                        st.info(s)
+        else:
+            st.warning(f"{selected_symbol} のデータを取得できませんでした。")
 
 # --- 取引履歴タブ ---
 with tab3:
