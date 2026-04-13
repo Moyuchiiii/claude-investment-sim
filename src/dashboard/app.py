@@ -425,8 +425,8 @@ with st.sidebar:
         st.markdown(f"""
         <div class="watchlist-item" style="{border}">
             <div>
-                <div class="watchlist-symbol">{marker}{sym}</div>
-                <div class="watchlist-name">{name}</div>
+                <div class="watchlist-symbol">{marker}{name}</div>
+                <div class="watchlist-name">{sym}</div>
             </div>
             <div class="watchlist-price price-flat">{price_str}</div>
         </div>
