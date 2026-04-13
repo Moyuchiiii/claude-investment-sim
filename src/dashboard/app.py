@@ -174,43 +174,6 @@ st.markdown("""
         letter-spacing: 2px !important;
     }
 
-    /* 銘柄リストカード */
-    .watchlist-item {
-        background: #111827;
-        border: 1px solid #1e293b;
-        border-radius: 6px;
-        padding: 10px 14px;
-        margin-bottom: 6px;
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-        cursor: pointer;
-        transition: border-color 0.2s;
-    }
-    .watchlist-item:hover {
-        border-color: #00d4aa;
-    }
-    .watchlist-symbol {
-        font-family: 'JetBrains Mono', monospace;
-        font-size: 13px;
-        font-weight: 600;
-        color: #e2e8f0;
-    }
-    .watchlist-name {
-        font-family: 'Noto Sans JP', sans-serif;
-        font-size: 10px;
-        color: #64748b;
-    }
-    .watchlist-price {
-        font-family: 'JetBrains Mono', monospace;
-        font-size: 13px;
-        font-weight: 500;
-        text-align: right;
-    }
-    .price-up { color: #00d4aa; }
-    .price-down { color: #ef4444; }
-    .price-flat { color: #64748b; }
-
     /* シグナルバッジ */
     .signal-buy {
         background: rgba(0, 212, 170, 0.12);
@@ -434,34 +397,6 @@ with st.sidebar:
         options=["1mo", "3mo", "6mo", "1y", "2y"],
         value="3mo"
     )
-
-    st.markdown("---")
-    st.markdown("### WATCHLIST")
-
-    # 全銘柄の価格を一括取得（キャッシュ60秒）
-    @st.cache_data(ttl=60, show_spinner=False)
-    def get_watchlist_prices(symbols: tuple) -> dict:
-        return fetcher.get_multiple_prices(list(symbols))
-
-    watchlist_prices = get_watchlist_prices(tuple(all_symbols))
-
-    # ウォッチリスト表示（HTML、軽量）
-    for sym in all_symbols:
-        name = SYMBOL_NAMES.get(sym, "")
-        price = watchlist_prices.get(sym)
-        price_str = f"¥{price:,.0f}" if price else "---"
-        is_selected = sym == st.session_state.selected_symbol
-        border = "border-color:#00d4aa;" if is_selected else ""
-        marker = "▶ " if is_selected else ""
-        st.markdown(f"""
-        <div class="watchlist-item" style="{border}">
-            <div>
-                <div class="watchlist-symbol">{marker}{name}</div>
-                <div class="watchlist-name">{sym}</div>
-            </div>
-            <div class="watchlist-price price-flat">{price_str}</div>
-        </div>
-        """, unsafe_allow_html=True)
 
     # === SCHEDULE セクション ===
     st.markdown("---")
