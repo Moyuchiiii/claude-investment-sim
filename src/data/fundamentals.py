@@ -1,13 +1,26 @@
 """決算データ・業績情報の取得"""
 import yfinance as yf
 from typing import Optional
+from src.data.cache import DataCache
+
+# キャッシュ有効期限
+FUNDAMENTALS_CACHE_TTL = 86400   # 24時間
+EARNINGS_CACHE_TTL = 604800      # 7日間
 
 
 class FundamentalData:
     """yfinanceからファンダメンタルズデータを取得"""
 
+    def __init__(self):
+        self.cache = DataCache()
+
     def get_fundamentals(self, symbol: str) -> dict:
         """銘柄のファンダメンタルズ情報を取得"""
+        # キャッシュチェック
+        cached = self.cache.get("fundamentals", symbol, FUNDAMENTALS_CACHE_TTL)
+        if cached is not None:
+            return cached
+
         try:
             ticker = yf.Ticker(symbol)
             info = ticker.info or {}
@@ -29,14 +42,21 @@ class FundamentalData:
                 "industry": info.get("industry"),        # 業種
             }
 
-            # None値を除去して返す
-            return {k: v for k, v in fundamentals.items() if v is not None}
+            # None値を除去してキャッシュ保存
+            result = {k: v for k, v in fundamentals.items() if v is not None}
+            self.cache.set("fundamentals", symbol, result)
+            return result
 
         except Exception as e:
             return {"error": f"ファンダメンタルズ取得失敗: {e}"}
 
     def get_earnings_history(self, symbol: str) -> list[dict]:
         """四半期決算の履歴を取得"""
+        # キャッシュチェック
+        cached = self.cache.get("earnings", symbol, EARNINGS_CACHE_TTL)
+        if cached is not None:
+            return cached
+
         try:
             ticker = yf.Ticker(symbol)
             earnings = ticker.quarterly_earnings
@@ -50,6 +70,8 @@ class FundamentalData:
                     "revenue": float(row.get("Revenue", 0)) if "Revenue" in row else None,
                     "earnings": float(row.get("Earnings", 0)) if "Earnings" in row else None,
                 })
+
+            self.cache.set("earnings", symbol, result)
             return result
 
         except Exception as e:

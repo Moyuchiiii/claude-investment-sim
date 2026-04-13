@@ -3,6 +3,10 @@ import feedparser
 import urllib.parse
 from datetime import datetime
 from typing import Optional
+from src.data.cache import DataCache
+
+# キャッシュ有効期限
+NEWS_CACHE_TTL = 3600  # 1時間
 
 # 銘柄コードから企業名へのマッピング（検索用）
 SEARCH_NAMES = {
@@ -22,8 +26,16 @@ SEARCH_NAMES = {
 class NewsCollector:
     """Google News RSSからニュースヘッドラインを取得"""
 
+    def __init__(self):
+        self.cache = DataCache()
+
     def get_news(self, symbol: str, max_results: int = 5) -> list[dict]:
         """銘柄に関連するニュースを取得"""
+        # キャッシュチェック
+        cached = self.cache.get("news", symbol, NEWS_CACHE_TTL)
+        if cached is not None:
+            return cached
+
         company_name = SEARCH_NAMES.get(symbol)
         if not company_name:
             # .Tを除去して検索
@@ -48,6 +60,7 @@ class NewsCollector:
                     "link": entry.link,
                 })
 
+            self.cache.set("news", symbol, articles)
             return articles
 
         except Exception:
@@ -55,6 +68,11 @@ class NewsCollector:
 
     def get_market_news(self, max_results: int = 5) -> list[dict]:
         """日本株市場全体のニュースを取得"""
+        # キャッシュチェック（市場ニュースはキー固定）
+        cached = self.cache.get("news", "market", NEWS_CACHE_TTL)
+        if cached is not None:
+            return cached
+
         query = urllib.parse.quote("日経平均 株式市場")
         url = f"https://news.google.com/rss/search?q={query}&hl=ja&gl=JP&ceid=JP:ja"
 
@@ -73,6 +91,7 @@ class NewsCollector:
                     "published": published,
                 })
 
+            self.cache.set("news", "market", articles)
             return articles
 
         except Exception:
