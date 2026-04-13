@@ -9,6 +9,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 
 import yfinance as yf
 import yaml
+from tqdm import tqdm
 from src.data.indicators import TechnicalIndicators
 
 # ファンダメンタルズで取得するフィールドとyfinance info キーのマッピング
@@ -95,10 +96,11 @@ def generate_monthly_snapshots(year: int, month: int):
     month_str = f"{year}-{month:02d}"
     snapshots = []
 
-    print(f"=== {month_str} のスナップショットを生成中 ===")
+    print(f"\n=== {month_str} のスナップショットを生成中 ===")
 
-    for symbol in symbols:
-        print(f"  {symbol} ({SYMBOL_NAMES.get(symbol, '')}) ...", end=" ")
+    for symbol in tqdm(symbols, desc=f"  {month_str}", unit="銘柄",
+                       bar_format="  {l_bar}{bar:30}{r_bar}",
+                       leave=False):
 
         try:
             ticker = yf.Ticker(symbol)
@@ -106,7 +108,6 @@ def generate_monthly_snapshots(year: int, month: int):
                                   end=(end_date + timedelta(days=1)).strftime("%Y-%m-%d"))
 
             if hist.empty or len(hist) < 30:
-                print("データ不足、スキップ")
                 continue
 
             # ファンダメンタルズはこのシンボルの月内全週で使い回す（週次で変わらないため）
@@ -117,7 +118,6 @@ def generate_monthly_snapshots(year: int, month: int):
             month_data = month_data[month_data.index <= end_date.strftime("%Y-%m-%d")]
 
             if month_data.empty:
-                print("月内データなし、スキップ")
                 continue
 
             # 週ごとにリサンプル（金曜日基準）
@@ -166,10 +166,7 @@ def generate_monthly_snapshots(year: int, month: int):
                 }
                 snapshots.append(snapshot)
 
-            print(f"{len([s for s in snapshots if s['symbol'] == symbol])} 週分")
-
         except Exception as e:
-            print(f"エラー: {e}")
             continue
 
     # 保存
@@ -281,6 +278,22 @@ def generate_outcome(year: int, month: int):
     return output_path
 
 
+def save_progress(current_month: str, total_months: int, completed: int, status: str):
+    """進捗状況をJSONファイルに保存（ダッシュボードから参照可能）"""
+    progress_path = SNAPSHOT_DIR / "_progress.json"
+    SNAPSHOT_DIR.mkdir(parents=True, exist_ok=True)
+    progress = {
+        "current_month": current_month,
+        "total_months": total_months,
+        "completed": completed,
+        "percent": round(completed / total_months * 100, 1) if total_months > 0 else 0,
+        "status": status,
+        "updated_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+    }
+    with open(progress_path, "w", encoding="utf-8") as f:
+        json.dump(progress, f, ensure_ascii=False, indent=2)
+
+
 def main():
     parser = argparse.ArgumentParser(description="過去データのスナップショット生成")
     parser.add_argument("--year", type=int, required=True, help="年 (例: 2025)")
@@ -289,17 +302,45 @@ def main():
     parser.add_argument("--range", type=int, default=1, help="何ヶ月分生成するか (例: 6)")
     args = parser.parse_args()
 
+    # 月リストを先に作成
+    months = []
     for i in range(args.range):
         m = args.month + i
         y = args.year
         while m > 12:
             m -= 12
             y += 1
+        months.append((y, m))
 
-        generate_monthly_snapshots(y, m)
+    total = len(months)
+    steps_per_month = 2 if args.outcomes else 1
+    total_steps = total * steps_per_month
 
-        if args.outcomes:
-            generate_outcome(y, m)
+    print(f"\n{'='*60}")
+    print(f"  スナップショット生成: {months[0][0]}-{months[0][1]:02d} → {months[-1][0]}-{months[-1][1]:02d}")
+    print(f"  {total}ヶ月 × {len(get_all_symbols())}銘柄 = {total * len(get_all_symbols())}セット")
+    print(f"{'='*60}\n")
+
+    with tqdm(total=total_steps, desc="全体進捗", unit="step",
+              bar_format="{l_bar}{bar:40}{r_bar}",
+              colour="green") as pbar:
+        for idx, (y, m) in enumerate(months):
+            month_str = f"{y}-{m:02d}"
+            save_progress(month_str, total, idx, "generating")
+
+            pbar.set_postfix_str(f"{month_str} スナップショット")
+            generate_monthly_snapshots(y, m)
+            pbar.update(1)
+
+            if args.outcomes:
+                pbar.set_postfix_str(f"{month_str} アウトカム")
+                generate_outcome(y, m)
+                pbar.update(1)
+
+    save_progress("完了", total, total, "completed")
+    print(f"\n{'='*60}")
+    print(f"  [DONE] {total} months snapshot generation complete!")
+    print(f"{'='*60}\n")
 
 
 if __name__ == "__main__":
