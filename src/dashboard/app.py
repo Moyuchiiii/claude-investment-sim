@@ -20,7 +20,7 @@ from src.data.fetcher import StockFetcher
 CONFIG_PATH = Path(__file__).parent.parent.parent / "config.yaml"
 
 def load_config():
-    with open(CONFIG_PATH) as f:
+    with open(CONFIG_PATH, encoding="utf-8") as f:
         return yaml.safe_load(f)
 
 # ページ設定
