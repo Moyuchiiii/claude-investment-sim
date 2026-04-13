@@ -315,25 +315,33 @@ st.markdown("""
         text-transform: uppercase;
     }
 
-    /* ラジオボタンをターミナル風に */
-    .stRadio > div {
-        background: #111827;
-        border: 1px solid #1e293b;
-        border-radius: 8px;
-        padding: 4px;
-        gap: 0;
-    }
-    .stRadio label {
-        font-family: 'JetBrains Mono', monospace !important;
-        font-size: 12px !important;
+    /* ナビボタン — secondary（非アクティブ） */
+    button[kind="secondary"] {
+        background: #111827 !important;
+        border: 1px solid #1e293b !important;
         color: #64748b !important;
+        font-family: 'JetBrains Mono', monospace !important;
+        font-size: 11px !important;
         letter-spacing: 0.5px;
-        padding: 8px 16px !important;
-        border-radius: 6px;
+        padding: 8px 12px !important;
+        border-radius: 6px !important;
+        transition: all 0.2s;
     }
-    .stRadio [data-checked="true"] {
+    button[kind="secondary"]:hover {
+        border-color: #00d4aa !important;
+        color: #94a3b8 !important;
+    }
+
+    /* ナビボタン — primary（アクティブ） */
+    button[kind="primary"] {
         background: rgba(0, 212, 170, 0.1) !important;
+        border: 1px solid rgba(0, 212, 170, 0.3) !important;
         color: #00d4aa !important;
+        font-family: 'JetBrains Mono', monospace !important;
+        font-size: 11px !important;
+        letter-spacing: 0.5px;
+        padding: 8px 12px !important;
+        border-radius: 6px !important;
     }
 </style>
 """, unsafe_allow_html=True)
@@ -921,12 +929,19 @@ else:
 st.markdown('<hr class="section-divider">', unsafe_allow_html=True)
 
 # === 共通情報セレクター ===
-common_view = st.radio(
-    "VIEW",
-    ["PORTFOLIO", "TRADES", "PERFORMANCE", "LEARNING", "SECTORS"],
-    horizontal=True,
-    label_visibility="collapsed"
-)
+VIEWS = ["PORTFOLIO", "TRADES", "PERFORMANCE", "LEARNING", "SECTORS"]
+if "common_view" not in st.session_state:
+    st.session_state.common_view = "PORTFOLIO"
+
+nav_cols = st.columns(len(VIEWS))
+for i, v in enumerate(VIEWS):
+    with nav_cols[i]:
+        btn_type = "primary" if v == st.session_state.common_view else "secondary"
+        if st.button(v, key=f"nav_{v}", use_container_width=True, type=btn_type):
+            st.session_state.common_view = v
+            st.rerun()
+
+common_view = st.session_state.common_view
 
 if common_view == "PORTFOLIO":
     # --- PORTFOLIO ---
