@@ -11,6 +11,18 @@ import yfinance as yf
 import yaml
 from src.data.indicators import TechnicalIndicators
 
+# ファンダメンタルズで取得するフィールドとyfinance info キーのマッピング
+FUNDAMENTALS_FIELDS = {
+    "per": "trailingPE",
+    "pbr": "priceToBook",
+    "roe": "returnOnEquity",
+    "eps": "trailingEps",
+    "dividend_yield": "dividendYield",
+    "market_cap": "marketCap",
+    "profit_margin": "profitMargins",
+    "debt_to_equity": "debtToEquity",
+}
+
 CONFIG_PATH = Path(__file__).parent.parent / "config.yaml"
 SNAPSHOT_DIR = Path(__file__).parent.parent / "learning" / "snapshots"
 
@@ -39,6 +51,30 @@ def get_all_symbols():
         if market.get("enabled"):
             symbols.extend(market["symbols"])
     return symbols
+
+
+def get_historical_fundamentals(symbol: str) -> dict:
+    """銘柄のファンダメンタルズデータをyfinance ticker.infoから取得する。
+    ファンダメンタルズは週次で変わらないため、月1回取得してスナップショット全週で使い回す。
+    取得できないフィールドはNoneではなくそのキー自体を含めず、欠損を明示しない。
+    """
+    try:
+        ticker = yf.Ticker(symbol)
+        info = ticker.info or {}
+
+        fundamentals = {}
+        for field_name, info_key in FUNDAMENTALS_FIELDS.items():
+            value = info.get(info_key)
+            # None以外の値のみ含める（欠損データはキーごと除外）
+            if value is not None:
+                fundamentals[field_name] = value
+
+        return fundamentals
+
+    except Exception as e:
+        # 取得失敗時は空dictを返して処理を継続させる
+        print(f"ファンダメンタルズ取得失敗 ({symbol}): {e}")
+        return {}
 
 
 def generate_monthly_snapshots(year: int, month: int):
@@ -72,6 +108,9 @@ def generate_monthly_snapshots(year: int, month: int):
             if hist.empty or len(hist) < 30:
                 print("データ不足、スキップ")
                 continue
+
+            # ファンダメンタルズはこのシンボルの月内全週で使い回す（週次で変わらないため）
+            fundamentals = get_historical_fundamentals(symbol)
 
             # 月内の金曜日（または最終営業日）を週次ポイントとして抽出
             month_data = hist[hist.index >= start_date.strftime("%Y-%m-%d")]
@@ -122,6 +161,8 @@ def generate_monthly_snapshots(year: int, month: int):
                         "ratio": round(vol_ratio, 2),
                         "anomaly": vol_ratio >= 2.0,
                     },
+                    # ファンダメンタルズ（月内全週で同じ値を使用）
+                    "fundamentals": fundamentals,
                 }
                 snapshots.append(snapshot)
 
