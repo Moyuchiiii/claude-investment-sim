@@ -60,6 +60,7 @@ markets:
 
 trading:
   max_position_pct: 0.2       # 1銘柄への最大投資割合 20%
+  max_sector_pct: 0.30        # 1セクターへの最大投資割合 30%
   min_confidence: 0.6          # 最低確信度
   max_daily_trades: 5          # 1日の最大取引回数
   stop_loss_pct: 0.05          # 損切りライン 5%

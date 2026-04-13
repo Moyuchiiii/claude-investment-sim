@@ -7,7 +7,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from src.engine.portfolio import PortfolioManager
-from src.engine.risk import RiskManager
+from src.engine.risk import RiskManager, get_portfolio_risk_summary
 from src.db.repository import TradeRepository, LearningLogRepository, TaxRepository
 from src.data.sectors import SectorAnalyzer, SECTOR_MAP
 from src.data.market import MarketIndicators
@@ -107,6 +107,16 @@ def main():
     tax_summary = tax_repo.get_yearly_summary(current_year)
     loss_carryforward = tax_repo.get_loss_carryforward(current_year)
 
+    # ポートフォリオリスクサマリーを計算
+    holdings_raw = portfolio_mgr.holding_repo.get_all()
+    prices_map = {}
+    for h in holdings_raw:
+        p = portfolio_mgr.fetcher.get_current_price(h.symbol)
+        if p:
+            prices_map[h.symbol] = p
+    portfolio_obj = portfolio_mgr.portfolio_repo.get()
+    portfolio_risk = get_portfolio_risk_summary(holdings_raw, prices_map, portfolio_obj) if portfolio_obj else {}
+
     # セクター分析を取得
     sector_analysis = sector_analyzer.get_sector_summary()
 
@@ -126,6 +136,7 @@ def main():
             "loss_carryforward": loss_carryforward,
         },
         "sector_analysis": sector_analysis,
+        "portfolio_risk": portfolio_risk,
         "market_overview": market_overview,
         "market_signals": market_signals,
     }

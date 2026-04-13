@@ -6,7 +6,7 @@ from src.db.repository import (
     PortfolioRepository, HoldingRepository, TradeRepository, TaxRepository
 )
 from src.data.fetcher import StockFetcher
-from src.engine.risk import RiskManager
+from src.engine.risk import RiskManager, check_sector_concentration, check_correlation_risk
 
 CONFIG_PATH = Path(__file__).parent.parent.parent / "config.yaml"
 
@@ -64,10 +64,24 @@ class TradeExecutor:
         if total_cost > portfolio.cash:
             return {"success": False, "error": f"残高不足（必要: {total_cost:,.0f}円, 残高: {portfolio.cash:,.0f}円）"}
 
-        # リスクチェック
+        # リスクチェック1: 1銘柄ポジション上限
         risk_check = self.risk_manager.check_buy(portfolio, symbol, total_cost)
         if not risk_check["allowed"]:
             return {"success": False, "error": risk_check["reason"]}
+
+        # リスクチェック2: セクター集中上限
+        holdings = self.holding_repo.get_all()
+        config = self.risk_manager.config
+        sector_check = check_sector_concentration(
+            symbol, quantity, execution_price, holdings, portfolio, config
+        )
+        if not sector_check["allowed"]:
+            return {"success": False, "error": sector_check["reason"]}
+
+        # リスクチェック3: 相関リスク（警告のみ、取引は止めない）
+        corr_check = check_correlation_risk(symbol, holdings)
+        for warning in corr_check.get("warnings", []):
+            print(f"[CORR WARNING] {warning}")
 
         # 売買を実行
         # 既存保有がある場合は平均取得単価を更新（実行価格ベースで計算）
