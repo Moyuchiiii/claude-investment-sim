@@ -1,3 +1,17 @@
 {
-  "model": "sonnet"
+  "model": "sonnet",
+  "permissions": {
+    "allow": [
+      "Read",
+      "Glob",
+      "Grep",
+      "Bash(python scripts/*)",
+      "Bash(pytest *)",
+      "Bash(streamlit *)",
+      "Bash(git *)"
+    ],
+    "deny": [
+      "Bash(rm -rf *)"
+    ]
+  }
 }
