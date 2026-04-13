@@ -9,6 +9,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 from src.engine.portfolio import PortfolioManager
 from src.engine.risk import RiskManager
 from src.db.repository import TradeRepository, LearningLogRepository, TaxRepository
+from src.data.sectors import SectorAnalyzer, SECTOR_MAP
 
 SYMBOL_NAMES = {
     "7203.T": "トヨタ自動車",
@@ -30,11 +31,16 @@ def main():
     trade_repo = TradeRepository()
     learning_repo = LearningLogRepository()
     tax_repo = TaxRepository()
+    sector_analyzer = SectorAnalyzer()
 
     status = portfolio_mgr.get_status()
     if "error" in status:
         print(json.dumps({"error": status["error"]}, ensure_ascii=False))
         return
+
+    # 保有銘柄にセクター情報を付与
+    for holding in status.get("holdings", []):
+        holding["sector"] = sector_analyzer.get_sector(holding["symbol"])
 
     alerts = risk_mgr.get_risk_alerts()
 
@@ -71,6 +77,9 @@ def main():
     tax_summary = tax_repo.get_yearly_summary(current_year)
     loss_carryforward = tax_repo.get_loss_carryforward(current_year)
 
+    # セクター分析を取得
+    sector_analysis = sector_analyzer.get_sector_summary()
+
     result = {
         "portfolio": status,
         "risk_alerts": alerts,
@@ -82,6 +91,7 @@ def main():
             "ytd_tax_paid": tax_summary["total_tax"],
             "loss_carryforward": loss_carryforward,
         },
+        "sector_analysis": sector_analysis,
     }
 
     print(json.dumps(result, ensure_ascii=False, indent=2, default=str))
