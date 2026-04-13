@@ -19,6 +19,9 @@ from src.db.repository import (
 )
 from src.data.fetcher import StockFetcher
 from src.data.indicators import TechnicalIndicators
+from src.data.fundamentals import FundamentalData
+from src.data.news import NewsCollector
+from src.data.sectors import SectorAnalyzer, SECTOR_MAP, SECTOR_COLORS
 
 CONFIG_PATH = Path(__file__).parent.parent.parent / "config.yaml"
 
@@ -316,6 +319,10 @@ learning_repo = LearningLogRepository()
 tax_repo = TaxRepository()
 fetcher = StockFetcher()
 indicators_calc = TechnicalIndicators()
+# ファンダメンタルズ・ニュース・セクター分析の初期化
+fundamental_data = FundamentalData()
+news_collector = NewsCollector()
+sector_analyzer = SectorAnalyzer()
 config = load_config()
 
 # ポートフォリオ取得
@@ -685,7 +692,7 @@ if selected_symbol:
 st.markdown('<hr class="section-divider">', unsafe_allow_html=True)
 
 # === 下部タブ ===
-tab1, tab2, tab3, tab4 = st.tabs(["PORTFOLIO", "TRADES", "PERFORMANCE", "LEARNING"])
+tab1, tab2, tab3, tab4, tab5, tab6, tab7 = st.tabs(["PORTFOLIO", "TRADES", "PERFORMANCE", "LEARNING", "FUNDAMENTALS", "NEWS", "SECTORS"])
 
 with tab1:
     if holdings:
@@ -814,6 +821,256 @@ with tab4:
                     st.code(f"Adjustment: {l.strategy_adjustment}")
     else:
         st.markdown('<div style="text-align:center; padding:40px; color:#334155; font-family:JetBrains Mono;">NO LEARNING DATA YET</div>', unsafe_allow_html=True)
+
+# === FUNDAMENTALSタブ ===
+with tab5:
+    if selected_symbol:
+        st.markdown(f"#### {selected_symbol} {SYMBOL_NAMES.get(selected_symbol, '')} — ファンダメンタルズ")
+
+        fund = fundamental_data.get_fundamentals(selected_symbol)
+        if "error" not in fund:
+            # バリュエーション指標カード（3列 x 2行）
+            fc1, fc2, fc3 = st.columns(3)
+
+            per = fund.get("per")
+            per_color = "#00d4aa" if per and per < 15 else "#ef4444" if per and per > 30 else "#94a3b8"
+            fc1.markdown(f"""
+            <div class="metric-card">
+                <div class="metric-label">PER</div>
+                <div class="metric-value" style="color:{per_color}; font-size:22px;">{f'{per:.1f}' if per else 'N/A'}</div>
+            </div>""", unsafe_allow_html=True)
+
+            pbr = fund.get("pbr")
+            pbr_color = "#00d4aa" if pbr and pbr < 1.0 else "#ef4444" if pbr and pbr > 5.0 else "#94a3b8"
+            fc2.markdown(f"""
+            <div class="metric-card">
+                <div class="metric-label">PBR</div>
+                <div class="metric-value" style="color:{pbr_color}; font-size:22px;">{f'{pbr:.2f}' if pbr else 'N/A'}</div>
+            </div>""", unsafe_allow_html=True)
+
+            roe = fund.get("roe")
+            roe_pct = f"{roe:.1%}" if roe else "N/A"
+            roe_color = "#00d4aa" if roe and roe > 0.10 else "#ef4444" if roe and roe < 0.05 else "#94a3b8"
+            fc3.markdown(f"""
+            <div class="metric-card">
+                <div class="metric-label">ROE</div>
+                <div class="metric-value" style="color:{roe_color}; font-size:22px;">{roe_pct}</div>
+            </div>""", unsafe_allow_html=True)
+
+            fc4, fc5, fc6 = st.columns(3)
+
+            eps = fund.get("eps")
+            fc4.markdown(f"""
+            <div class="metric-card">
+                <div class="metric-label">EPS</div>
+                <div class="metric-value" style="font-size:22px;">{'¥' + f'{eps:,.0f}' if eps else 'N/A'}</div>
+            </div>""", unsafe_allow_html=True)
+
+            div_yield = fund.get("dividend_yield")
+            div_str = f"{div_yield:.2%}" if div_yield else "N/A"
+            div_color = "#00d4aa" if div_yield and div_yield > 0.03 else "#94a3b8"
+            fc5.markdown(f"""
+            <div class="metric-card">
+                <div class="metric-label">配当利回り</div>
+                <div class="metric-value" style="color:{div_color}; font-size:22px;">{div_str}</div>
+            </div>""", unsafe_allow_html=True)
+
+            mcap = fund.get("market_cap")
+            if mcap:
+                if mcap >= 1e12:
+                    mcap_str = f"¥{mcap/1e12:.1f}兆"
+                elif mcap >= 1e8:
+                    mcap_str = f"¥{mcap/1e8:.0f}億"
+                else:
+                    mcap_str = f"¥{mcap:,.0f}"
+            else:
+                mcap_str = "N/A"
+            fc6.markdown(f"""
+            <div class="metric-card">
+                <div class="metric-label">時価総額</div>
+                <div class="metric-value" style="font-size:22px;">{mcap_str}</div>
+            </div>""", unsafe_allow_html=True)
+
+            # 追加指標テーブル
+            detail_data = []
+            label_map = {
+                "profit_margin": ("利益率", lambda v: f"{v:.1%}"),
+                "debt_to_equity": ("D/E比率", lambda v: f"{v:.0f}%"),
+                "current_ratio": ("流動比率", lambda v: f"{v:.2f}"),
+                "free_cashflow": ("FCF", lambda v: f"¥{v:,.0f}"),
+                "revenue": ("売上高", lambda v: f"¥{v:,.0f}"),
+                "sector": ("セクター", lambda v: str(v)),
+                "industry": ("業種", lambda v: str(v)),
+            }
+            for key, (label, fmt) in label_map.items():
+                val = fund.get(key)
+                if val is not None:
+                    detail_data.append({"指標": label, "値": fmt(val)})
+
+            if detail_data:
+                st.dataframe(pd.DataFrame(detail_data), use_container_width=True, hide_index=True)
+
+            # ファンダメンタルシグナル
+            fund_signals = fundamental_data.get_valuation_signal(fund)
+            if fund_signals:
+                st.markdown("##### バリュエーションシグナル")
+                for s in fund_signals:
+                    if "割安" in s or "高収益" in s or "高配当" in s or "高利益率" in s:
+                        st.markdown(f'<div class="signal-buy">{s}</div>', unsafe_allow_html=True)
+                    elif "割高" in s or "低収益" in s or "高負債" in s or "低利益率" in s:
+                        st.markdown(f'<div class="signal-sell">{s}</div>', unsafe_allow_html=True)
+                    else:
+                        st.markdown(f'<div class="signal-neutral">{s}</div>', unsafe_allow_html=True)
+        else:
+            st.warning(f"ファンダメンタルズデータを取得できませんでした: {fund.get('error', '')}")
+
+# === NEWSタブ ===
+with tab6:
+    col_stock_news, col_market_news = st.columns(2)
+
+    with col_stock_news:
+        st.markdown(f"#### {selected_symbol} {SYMBOL_NAMES.get(selected_symbol, '')} のニュース")
+        stock_news = news_collector.get_news(selected_symbol, max_results=8)
+        if stock_news:
+            # センチメント分析
+            headlines = [n["title"] for n in stock_news]
+            sentiment = news_collector.analyze_sentiment_simple(headlines)
+
+            sent_color = "#00d4aa" if sentiment["label"] == "ポジティブ" else "#ef4444" if sentiment["label"] == "ネガティブ" else "#94a3b8"
+            st.markdown(f"""
+            <div class="metric-card" style="margin-bottom:12px;">
+                <div class="metric-label">センチメント</div>
+                <div class="metric-value" style="color:{sent_color}; font-size:20px;">{sentiment['label']}</div>
+                <div style="font-family:'JetBrains Mono'; font-size:11px; color:#64748b;">
+                    スコア: {sentiment['score']:+.2f} | ポジ: {sentiment['positive']} ネガ: {sentiment['negative']}
+                </div>
+            </div>
+            """, unsafe_allow_html=True)
+
+            for article in stock_news:
+                source = article.get("source", "")
+                published = article.get("published", "")[:10] if article.get("published") else ""
+                st.markdown(f"""
+                <div style="background:#111827; border:1px solid #1e293b; border-radius:6px; padding:10px 14px; margin-bottom:6px;">
+                    <div style="font-family:'Noto Sans JP'; font-size:13px; color:#e2e8f0;">{article['title']}</div>
+                    <div style="font-family:'JetBrains Mono'; font-size:10px; color:#64748b; margin-top:4px;">
+                        {source} — {published}
+                    </div>
+                </div>
+                """, unsafe_allow_html=True)
+        else:
+            st.info("ニュースを取得できませんでした")
+
+    with col_market_news:
+        st.markdown("#### 市場ニュース")
+        market_news = news_collector.get_market_news(max_results=8)
+        if market_news:
+            headlines_m = [n["title"] for n in market_news]
+            sentiment_m = news_collector.analyze_sentiment_simple(headlines_m)
+
+            sent_color_m = "#00d4aa" if sentiment_m["label"] == "ポジティブ" else "#ef4444" if sentiment_m["label"] == "ネガティブ" else "#94a3b8"
+            st.markdown(f"""
+            <div class="metric-card" style="margin-bottom:12px;">
+                <div class="metric-label">市場センチメント</div>
+                <div class="metric-value" style="color:{sent_color_m}; font-size:20px;">{sentiment_m['label']}</div>
+                <div style="font-family:'JetBrains Mono'; font-size:11px; color:#64748b;">
+                    スコア: {sentiment_m['score']:+.2f} | ポジ: {sentiment_m['positive']} ネガ: {sentiment_m['negative']}
+                </div>
+            </div>
+            """, unsafe_allow_html=True)
+
+            for article in market_news:
+                source = article.get("source", "")
+                published = article.get("published", "")[:10] if article.get("published") else ""
+                st.markdown(f"""
+                <div style="background:#111827; border:1px solid #1e293b; border-radius:6px; padding:10px 14px; margin-bottom:6px;">
+                    <div style="font-family:'Noto Sans JP'; font-size:13px; color:#e2e8f0;">{article['title']}</div>
+                    <div style="font-family:'JetBrains Mono'; font-size:10px; color:#64748b; margin-top:4px;">
+                        {source} — {published}
+                    </div>
+                </div>
+                """, unsafe_allow_html=True)
+        else:
+            st.info("市場ニュースを取得できませんでした")
+
+# === SECTORSタブ ===
+with tab7:
+    st.markdown("#### セクター分析")
+
+    # ローテーションシグナル
+    rotation_signals = sector_analyzer.get_rotation_signals("1mo")
+    if rotation_signals:
+        st.markdown("##### ローテーションシグナル")
+        for s in rotation_signals:
+            if "強セクター" in s or "上昇トレンド" in s:
+                st.markdown(f'<div class="signal-buy">{s}</div>', unsafe_allow_html=True)
+            elif "弱セクター" in s or "下降トレンド" in s:
+                st.markdown(f'<div class="signal-sell">{s}</div>', unsafe_allow_html=True)
+            else:
+                st.markdown(f'<div class="signal-neutral">{s}</div>', unsafe_allow_html=True)
+
+    st.markdown("---")
+
+    # セクター別パフォーマンス棒グラフ
+    col_1m, col_3m = st.columns(2)
+
+    with col_1m:
+        perf_1m = sector_analyzer.analyze_sector_performance("1mo")
+        if perf_1m:
+            sectors = list(perf_1m.keys())
+            returns = [perf_1m[s]["avg_return_pct"] for s in sectors]
+            colors = [SECTOR_COLORS.get(s, "#64748b") for s in sectors]
+
+            fig_sector_1m = go.Figure(go.Bar(
+                x=sectors, y=returns,
+                marker_color=colors,
+                text=[f"{r:+.1f}%" for r in returns],
+                textposition="outside",
+                textfont=dict(family="JetBrains Mono", size=11, color="#94a3b8"),
+            ))
+            fig_sector_1m.update_layout(
+                **CHART_LAYOUT, height=300,
+                title=dict(text="セクター別リターン (1M)", font=dict(size=12, color="#64748b")),
+            )
+            fig_sector_1m.update_yaxes(gridcolor="#1e293b")
+            st.plotly_chart(fig_sector_1m, use_container_width=True)
+
+    with col_3m:
+        perf_3m = sector_analyzer.analyze_sector_performance("3mo")
+        if perf_3m:
+            sectors_3 = list(perf_3m.keys())
+            returns_3 = [perf_3m[s]["avg_return_pct"] for s in sectors_3]
+            colors_3 = [SECTOR_COLORS.get(s, "#64748b") for s in sectors_3]
+
+            fig_sector_3m = go.Figure(go.Bar(
+                x=sectors_3, y=returns_3,
+                marker_color=colors_3,
+                text=[f"{r:+.1f}%" for r in returns_3],
+                textposition="outside",
+                textfont=dict(family="JetBrains Mono", size=11, color="#94a3b8"),
+            ))
+            fig_sector_3m.update_layout(
+                **CHART_LAYOUT, height=300,
+                title=dict(text="セクター別リターン (3M)", font=dict(size=12, color="#64748b")),
+            )
+            fig_sector_3m.update_yaxes(gridcolor="#1e293b")
+            st.plotly_chart(fig_sector_3m, use_container_width=True)
+
+    # 銘柄別リターン詳細テーブル
+    st.markdown("##### 銘柄別リターン詳細")
+    if perf_1m:
+        detail_rows = []
+        for sector, data in perf_1m.items():
+            for sym, ret in data["individual_returns"].items():
+                name = SYMBOL_NAMES.get(sym, sym)
+                ret_3m = perf_3m.get(sector, {}).get("individual_returns", {}).get(sym, None) if perf_3m else None
+                detail_rows.append({
+                    "セクター": sector,
+                    "銘柄": f"{sym} {name}",
+                    "1Mリターン": f"{ret:+.1f}%",
+                    "3Mリターン": f"{ret_3m:+.1f}%" if ret_3m is not None else "N/A",
+                })
+        st.dataframe(pd.DataFrame(detail_rows), use_container_width=True, hide_index=True)
 
 # フッター
 st.markdown(f"""
