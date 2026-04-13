@@ -7,6 +7,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from src.data.fetcher import StockFetcher
 from src.data.indicators import TechnicalIndicators
+from src.data.fundamentals import FundamentalData
 
 SYMBOL_NAMES = {
     "7203.T": "トヨタ自動車",
@@ -32,6 +33,7 @@ def main():
 
     fetcher = StockFetcher()
     indicators = TechnicalIndicators()
+    fundamentals_fetcher = FundamentalData()
 
     history = fetcher.get_history(symbol, period=period)
     if history.empty:
@@ -40,6 +42,10 @@ def main():
 
     tech = indicators.calculate_all(history)
     signals = indicators.get_signals(tech) if "error" not in tech else []
+
+    # ファンダメンタルズデータを取得
+    fundamentals = fundamentals_fetcher.get_fundamentals(symbol)
+    fundamental_signals = fundamentals_fetcher.get_valuation_signal(fundamentals)
 
     # 最新のローソク足データを取得
     market_data = {
@@ -70,6 +76,8 @@ def main():
         "market_data": market_data,
         "indicators": clean_tech,
         "signals": signals,
+        "fundamentals": fundamentals,
+        "fundamental_signals": fundamental_signals,
     }
 
     print(json.dumps(result, ensure_ascii=False, indent=2))
