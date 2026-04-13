@@ -105,6 +105,9 @@ cd D:\Claude\invest\claude-investment-sim && python scripts/analyze_symbol.py <s
 - 損切りライン: -5%
 - 利確ライン: +15%
 - 確信度 0.6 未満は見送り
+- 1セクターへの投資上限: 総資産の30%（超過する場合は買い不可）
+- 相関係数 0.8 以上の銘柄を既に保有している場合は注意（分散効果が薄い）
+- get_status.py の `portfolio_risk` を確認し、HHI（集中度）が高い場合は新規買いを慎重に
 
 ### Step 5: 売買実行
 

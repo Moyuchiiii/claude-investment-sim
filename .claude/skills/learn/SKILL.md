@@ -81,22 +81,46 @@ cat D:\Claude\invest\claude-investment-sim\learning\snapshots\{YYYY-MM}_outcomes
 - 「慎重に判断すべき」
 - 「テクニカル指標を重視する」
 
-教訓ごとに以下のコマンドで記録:
+教訓ごとに以下のコマンドで記録。**必ずタグ・銘柄・市場コンテキストを付ける**:
 
 ```bash
-cd D:\Claude\invest\claude-investment-sim && python scripts/record_lesson.py --outcome <WIN|LOSS|HOLD> --lesson "<具体的な教訓>"
+cd D:\Claude\invest\claude-investment-sim && python scripts/record_lesson.py \
+  --outcome <WIN|LOSS|HOLD> \
+  --lesson "<具体的な教訓>" \
+  --tags "sector:<セクター名>,indicator:<指標名>,pattern:<パターン名>" \
+  --symbol "<銘柄コード>" \
+  --market-context "<市場環境タグ>"
 ```
 
-### Step 6: 地合い別の教訓タグ付け
+#### タグの付け方
 
-教訓を記録する際、どういう地合い（市場環境）での教訓かを必ず含める:
-- 「上昇相場で:」「下落相場で:」「横ばい相場で:」
-- 「円安局面で:」「円高局面で:」
+- `--tags`: カンマ区切りで複数指定。キー:値の形式
+  - `sector:金融` `sector:電機・精密` `sector:自動車`
+  - `indicator:RSI` `indicator:MACD` `indicator:BB`
+  - `pattern:reversal` `pattern:breakout` `pattern:momentum`
+  - `timeframe:1w` `timeframe:1m`
+- `--symbol`: 対象銘柄（例: `8306.T`）
+- `--market-context`: その時の市場環境タグ。カンマ区切り
+  - `nikkei_up` / `nikkei_down` / `nikkei_flat`
+  - `yen_weak` / `yen_strong`
+  - `sp500_up` / `sp500_down`
+  - `high_volatility` / `low_volatility`
 
-例:
+#### 例
+
 ```bash
-python scripts/record_lesson.py --outcome WIN --lesson "上昇相場で: 電機セクターのRSI 30割れは短期反発しやすい。1週間で+3%の確率が高い"
+python scripts/record_lesson.py \
+  --outcome WIN \
+  --lesson "RSI 30割れ + MACD GC の組み合わせで買ったら1週間で+3.2%。電機セクターは短期反発しやすい" \
+  --tags "sector:電機・精密,indicator:RSI,indicator:MACD,pattern:reversal" \
+  --symbol "6758.T" \
+  --market-context "nikkei_up,yen_weak"
 ```
+
+### Step 6: 過去の類似教訓を確認
+
+教訓を記録する前に、同じ銘柄やセクターの既存教訓を確認して矛盾しないかチェックする。
+record_lesson.py で記録された教訓は `get_lessons_by_tag` / `get_lessons_by_symbol` で検索可能。
 
 ### Step 7: 月次サマリー
 
